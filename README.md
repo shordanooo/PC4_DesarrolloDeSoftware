@@ -1,8 +1,8 @@
 # Plataforma PetMatch & Alert - PC4
 
-Este proyecto implementa un sistema full-stack desarrollado en FastAPI (Python) y React (Vite) que utiliza SQLite como motor de base de datos relacional integrado. La aplicacion gestiona el reporte de mascotas perdidas, la distribucion de alertas geograficas en un radio de 1 km, la busqueda de mascotas basada en analisis de imagenes clasificada por intenciones y una red de cuidadores temporales organizados bajo restricciones operativas y validacion oficial.
+Este proyecto implementa un sistema de software modular desarrollado en FastAPI (Python) y React (Vite) con persistencia de datos local en SQLite. La aplicacion gestiona el reporte de mascotas perdidas, la emision de alertas geograficas asincronas en un radio maximo de 1 km, la busqueda automatizada de mascotas basada en analisis de imagenes estructurada por intenciones de usuario y la administracion de una red de cuidadores temporales clasificados por roles operativos.
 
-El diseno arquitectonico se fundamenta en la aplicacion rigurosa de 6 Patrones de Diseno GoF (Gang of Four), divididos en creacionales, estructurales y de comportamiento, asegurando alta cohesion, bajo acoplamiento e intercambiabilidad.
+La arquitectura del sistema se rige bajo la implementacion de 6 Patrones de Diseno de la metodologia Gang of Four (GoF) para garantizar la modularidad, escalabilidad e intercambiabilidad de los componentes del dominio.
 
 ---
 
@@ -12,42 +12,137 @@ El diseno arquitectonico se fundamenta en la aplicacion rigurosa de 6 Patrones d
 
 *   **Singleton (SQLiteManager)**:
     *   *Ubicacion:* backend/app/config/db.py
-    *   *Proposito:* Administra una unica instancia de conexion a la base de datos local SQLite a lo largo del ciclo de vida del servidor web. Evita la sobrecarga de conexiones concurrentes y asegura que todas las consultas compartan el mismo estado de transacciones de base de datos.
+    *   *Proposito:* Encapsula y controla una unica instancia de conexion de base de datos SQLite activa a lo largo del ciclo de vida del servidor web, optimizando la asignacion de recursos y controlando el estado transaccional.
 *   **Factory Method (CaregiverProfileFactory)**:
     *   *Ubicacion:* backend/app/patterns/creational/factory.py
-    *   *Proposito:* Instancia la clase de perfil de cuidador correspondiente (Cuidador Solidario, Cuidador Profesional o Cuidador Especializado) segun el tipo de servicio seleccionado. Esto permite aplicar limites maximos de capacidad de mascotas, reglas de cobros y administracion de medicamentos de forma dinamica.
+    *   *Proposito:* Instancia dinamicamente el tipo de perfil de cuidador correspondiente (Cuidador Solidario, Cuidador Profesional o Cuidador Especializado) evaluando las restricciones de operacion, limites de mascotas permitidas y reglas de negocio aplicables a cada rol.
 
 ### 2. Patrones Estructurales
 
 *   **Adapter (ImageSearchAdapter)**:
     *   *Ubicacion:* backend/app/patterns/structural/adapter.py
-    *   *Proposito:* Adapta una interfaz heredada e incompatible de un motor de clasificacion externo (que procesa archivos binarios sincronamente) para que funcione de manera asincrona y exponga una salida estandarizada en formato JSON, satisfaciendo el requerimiento RNF 2.1.
+    *   *Proposito:* Adapta las interfaces y flujos sincronos de un componente de clasificacion heredado (ExternalLegacyPetSearchEngine) para integrarlo de forma asincrona y estructurada mediante modelos estandarizados JSON en el enrutador de FastAPI.
 *   **Facade (AlertNotificationFacade)**:
     *   *Ubicacion:* backend/app/patterns/structural/facade.py
-    *   *Proposito:* Provee una interfaz unificada y simplificada para el proceso complejo de registrar una alerta de mascota perdida. Esta fachada coordina la persistencia del reporte, el calculo de distancias mediante la formula Haversine, la busqueda de vecinos y cuidadores observadores en el radio de 1 km, y la activacion del sistema de notificaciones.
+    *   *Proposito:* Simplifica el flujo complejo de alertas geograficas al unificar las tareas de persistencia del reporte, calculo de coordenadas radiales Haversine y disparo de notificaciones a los observadores en una unica llamada limpia de API.
 
 ### 3. Patrones de Comportamiento
 
 *   **Observer (AlertObserverSystem)**:
     *   *Ubicacion:* backend/app/patterns/behavioral/observer.py
-    *   *Proposito:* Implementa la suscripcion y notificacion automatica de eventos a los vecinos y cuidadores registrados en el area geografica de la mascota perdida. Funciona en hilos asincronos concurrentes (utilizando asyncio.gather) logrando despachar notificaciones en un tiempo inferior a los 5 segundos (RNF 1.1).
+    *   *Proposito:* Registra y despacha notificaciones push/email concurrentes a vecinos y cuidadores activos (observadores) en un rango de 1 km en paralelo mediante hilos asincronos concurrentes (asyncio.gather).
 *   **Strategy (SearchIntentStrategy)**:
     *   *Ubicacion:* backend/app/patterns/behavioral/strategy.py
-    *   *Proposito:* Permite intercambiar dinamicamente el algoritmo de busqueda de mascotas segun la intencion seleccionada por el usuario en el formulario (Adopcion: busca en bases de datos de albergues y ONGs; Venta: busca en criaderos certificados; Verificar Perdida: busca coincidencias en el registro de alertas activas).
+    *   *Proposito:* Encapsula y selecciona dinamicamente el algoritmo de busqueda de mascotas segun la intencion del usuario (adopcion en ONGs, venta en criaderos o localizacion de alertas activas).
 
 ---
 
-## Estructura del Codigo
+## Flujos de Control del Sistema
+
+### Flujo 1: Registro de Mascota Perdida y Alerta Geografica (Facade + Observer)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dueno as Usuario Dueno
+    participant FE as Frontend (React)
+    participant BE as Backend (FastAPI)
+    participant FC as Facade (AlertNotificationFacade)
+    participant DB as SQLite Database
+    participant OB as Observer (AlertObserverSystem)
+    
+    Dueno->>FE: Completa formulario y selecciona coordenadas
+    FE->>BE: POST /api/lost-pets (Payload JSON)
+    BE->>FC: register_lost_pet_and_alert_neighbors()
+    FC->>DB: INSERT INTO lost_pets
+    DB-->>FC: Retorna ID de mascota
+    FC->>DB: SELECT vecinos/cuidadores a menos de 1 km (Haversine)
+    DB-->>FC: Lista de observadores
+    FC->>OB: notify_observers_async()
+    Note over OB: Despacho asincrono via asyncio.gather
+    OB-->>FC: Notificaciones procesadas
+    FC-->>BE: Retorna objeto mascota guardado
+    BE-->>FE: HTTP 200 (Datos guardados y notificados)
+    FE->>Dueno: Muestra mensaje de exito e hito de alertas enviadas
+```
+
+### Flujo 2: Buscador Inteligente por Imagen (Adapter + Strategy)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Invitado as Usuario Invitado
+    participant FE as Frontend (React)
+    participant BE as API Router (image_search)
+    participant AD as Adapter (ImageSearchAdapter)
+    participant LE as Legacy Search Engine
+    participant SC as Strategy (SearchContext)
+    participant DB as SQLite Database
+
+    Invitado->>FE: Carga imagen y selecciona intencion (Adopcion/Venta/Verificar)
+    FE->>BE: POST /api/image-search (Multipart Form Data)
+    BE->>AD: find_matches(image_bytes)
+    Note over AD: Adapta entrada binaria sincrona heredada
+    AD->>LE: process_image_legacy()
+    LE-->>AD: Retorna metadatos propietarios
+    AD-->>BE: Retorna metadatos estandarizados (Especie, Raza, Confianza)
+    BE->>SC: execute_search(metadata, db)
+    Note over SC: Selecciona estrategia segun intencion
+    SC->>DB: SELECT filtered by species and breed
+    DB-->>SC: Resultados coincidentes
+    SC-->>BE: Lista filtrada de mascotas
+    BE-->>FE: HTTP 200 (Metadatos detectados + Resultados)
+    FE->>Invitado: Muestra metadatos y tarjetas filtradas
+```
+
+### Flujo 3: Red de Cuidadores, Validacion y Calificaciones (Factory Method)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cuidador as Usuario Cuidador
+    actor Admin as Administrador
+    participant FE as Frontend (React)
+    participant BE as API Router (caretakers)
+    participant FY as Factory (CaregiverProfileFactory)
+    participant DB as SQLite Database
+
+    Cuidador->>FE: Envia formulario de registro con DNI y rol
+    FE->>BE: POST /api/caretakers (JSON)
+    BE->>FY: create_profile(role, data)
+    Note over FY: Instancia Solidario, Profesional o Especializado
+    FY-->>BE: Retorna objeto con reglas y restricciones aplicadas
+    BE->>DB: INSERT INTO caretakers (is_verified = 0)
+    DB-->>FE: Confirmacion de registro pendiente
+    
+    Note over Admin, FE: Validacion administrativa
+    Admin->>FE: Presiona Validar DNI
+    FE->>BE: POST /api/caretakers/{id}/verify
+    BE->>DB: UPDATE caretakers SET is_verified = 1
+    DB-->>FE: Perfil verificado
+    
+    Note over FE: Valoraciones y calificaciones
+    FE->>BE: POST /api/caretakers/{id}/reviews (Resena)
+    BE->>DB: INSERT INTO reviews
+    BE->>DB: SELECT reviews
+    DB-->>BE: Historial de reviews
+    BE->>FY: Recalcula average_rating
+    BE-->>FE: Promedio actualizado
+```
+
+---
+
+## Estructura General del Proyecto
 
 PC4_DesarrolloDeSoftware/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                # Inicializacion de FastAPI y carga automatica de semilla
+│   │   ├── main.py                # Entrada FastAPI e inicializacion de semilla automatica
 │   │   ├── config/
 │   │   │   └── db.py              # Singleton de base de datos SQLite
 │   │   ├── models/
 │   │   │   └── schemas.py         # Modelos de validacion de datos (Pydantic)
-│   │   ├── routers/               # Controladores y rutas de la API
+│   │   ├── routers/               # Rutas de la API (Lost Pets, Caretakers, Image Search)
 │   │   └── patterns/
 │   │       ├── creational/        # Factory Method
 │   │       ├── structural/        # Adapter y Facade
@@ -61,75 +156,6 @@ PC4_DesarrolloDeSoftware/
 │   │   └── main.jsx
 │   ├── package.json
 │   └── vite.config.js
-└── README.md
-
----
-
-## Requisitos de Entorno
-
-*   Python 3.10 o superior
-*   Node.js 18 o superior
-*   SQLite3 integrado en el entorno de ejecucion de Python (no requiere instalaciones de servidores externos)
-
----
-
-## Instrucciones de Ejecucion
-
-### Paso 1: Configurar y Levantar el Servidor Backend
-
-1.  Navegar a la carpeta del backend:
-    ```bash
-    cd backend
-    ```
-2.  Crear e iniciar un entorno virtual de Python:
-    ```bash
-    python -m venv venv
-    # En Windows:
-    .\venv\Scripts\activate
-    ```
-3.  Instalar las dependencias requeridas:
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  Ejecutar el servidor de desarrollo:
-    ```bash
-    python run.py
-    ```
-    La API estara disponible en http://localhost:8000. Los datos de prueba semilla se cargaran automaticamente en la primera ejecucion si la base de datos se encuentra vacia.
-
-### Paso 2: Configurar y Levantar el Frontend
-
-1.  Abrir una nueva terminal e ingresar a la carpeta del frontend:
-    ```bash
-    cd frontend
-    ```
-2.  Instalar las dependencias de Node:
-    ```bash
-    npm install
-    ```
-3.  Iniciar el servidor de Vite:
-    ```bash
-    npm run dev
-    ```
-    La aplicacion estara accesible a traves de http://localhost:5173.
-
----
-
-## Guia de Pruebas y Calificacion
-
-1.  **Carga Automatizada de Datos (Semilla):** Al levantar la API de FastAPI por primera vez, el sistema detecta de forma automatica que no existen registros en el archivo SQLite local y puebla las tablas con usuarios vecinos, cuidadores y alertas iniciales. No se requiere interaccion manual para inicializar el sistema.
-2.  **Registro de Alertas Geograficas:**
-    *   Ingresar a la aplicacion y autenticarse con el rol de Dueno.
-    *   Acceder al formulario de reporte e ingresar la informacion de la mascota.
-    *   Seleccionar una ubicacion en el mapa interactivo (por ejemplo, arrastrando el marcador a una coordenada cercana) y registrar el reporte.
-    *   El sistema asincrono calculara la distancia y despachara las alertas a los vecinos en un radio de 1 km.
-3.  **Avistamientos Anonimos:**
-    *   En las tarjetas de alertas activas, cualquier usuario invitado puede hacer clic en Reportar Avistamiento Anonimo.
-    *   Esto permite subir una foto de referencia y marcar la ubicacion exacta en el mapa, manteniendo ocultos los datos del dueno.
-4.  **Buscador Inteligente:**
-    *   Ingresar a la seccion de busqueda por imagen y subir un archivo.
-    *   Seleccionar la intencion (Adopcion, Venta o Verificar Perdida).
-    *   El sistema adaptara la imagen mediante el Adapter y aplicara la estrategia correspondiente para filtrar los resultados de albergues, criaderos o alertas activas respectivamente.
-5.  **Verificacion de Cuidadores:**
-    *   Ingresar como cuidador y registrarse en el sistema con un numero de DNI.
-    *   El cuidador permanecera inactivo hasta que se acceda al Panel de Validacion en la barra lateral del modulo de cuidadores y se pulse el boton para validar el DNI (RNF 3.1), haciendolo publico e interactivo.
+├── REQUERIMIENTOS.md              # Especificacion de requerimientos tecnicos
+├── EJECUCION.md                   # Guia detallada de despliegue y validacion
+└── README.md                      # Descripcion del proyecto y patrones de diseno
