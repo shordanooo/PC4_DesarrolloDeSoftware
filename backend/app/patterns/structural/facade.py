@@ -3,68 +3,79 @@ import math
 from app.patterns.behavioral.observer import LostPetSubject, UserObserver, CaretakerObserver
 
 class AlertNotificationFacade:
-    """
-    Facade que unifica y simplifica el flujo complejo de:
-    1. Registrar una mascota perdida en la base de datos.
-    2. Filtrar usuarios y cuidadores cercanos en un radio (Fórmula de Haversine).
-    3. Verificar restricciones del cuidador (especies aceptadas).
-    4. Notificar a través del patrón Observer en paralelo.
-    """
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, conn):
+        self.conn = conn
 
     def _haversine_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        R = 6371.0  # Radio de la Tierra en kilómetros
+        R = 6371.0  # Earth radius in km
         dlat = math.radians(lat2 - lat1)
         dlon = math.radians(lon2 - lon1)
         a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         return R * c
 
-    async def register_lost_pet_and_alert_neighbors(self, pet_data: Dict[str, Any], radius_km: float = 1.0) -> Dict[str, Any]:
-        # 1. Registrar reporte de mascota perdida
-        result = await self.db.lost_pets.insert_one(pet_data)
-        pet_data["_id"] = result.inserted_id
+    def register_lost_pet_and_alert_neighbors(self, pet_data: Dict[str, Any], radius_km: float = 1.0) -> Dict[str, Any]:
+        cursor = self.conn.cursor()
+        
+        # 1. Insert lost pet
+        cursor.execute(
+            """
+            INSERT INTO lost_pets (name, species, breed, description, lat, lon, photo, status, owner_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                pet_data["name"],
+                pet_data["species"],
+                pet_data["breed"],
+                pet_data["description"],
+                pet_data["lat"],
+                pet_data["lon"],
+                pet_data["photo"],
+                pet_data["status"],
+                pet_data["owner_id"]
+            )
+        )
+        pet_id = cursor.lastrowid
+        pet_data["id"] = pet_id
+        self.conn.commit()
 
-        # 2. Inicializar el Subject
+        # 2. Initialize subject
         subject = LostPetSubject()
 
-        # 3. Buscar y registrar observadores de tipo Usuario
-        users_cursor = self.db.users.find({"lat": {"$exists": True}, "lon": {"$exists": True}})
-        async for user in users_cursor:
-            # Evitar alertarse a sí mismo
-            if str(user["_id"]) == str(pet_data.get("owner_id")):
+        # 3. Query and register user observers
+        cursor.execute("SELECT * FROM users WHERE lat IS NOT NULL AND lon IS NOT NULL")
+        users = cursor.fetchall()
+        
+        for user in users:
+            if str(user["id"]) == str(pet_data.get("owner_id")):
                 continue
             
             dist = self._haversine_distance(pet_data["lat"], pet_data["lon"], user["lat"], user["lon"])
             if dist <= radius_km:
                 subject.register_observer(
                     UserObserver(
-                        observer_id=str(user["_id"]),
+                        observer_id=str(user["id"]),
                         email=user["email"],
                         lat=user["lat"],
                         lon=user["lon"]
                     )
                 )
 
-        # 4. Buscar y registrar cuidadores con alertas activas (RF 3.3)
-        caretakers_cursor = self.db.caretakers.find({
-            "alert_notifications_enabled": True,
-            "lat": {"$exists": True},
-            "lon": {"$exists": True}
-        })
-        async for caretaker in caretakers_cursor:
+        # 4. Query and register caretaker observers
+        cursor.execute("SELECT * FROM caretakers WHERE alert_notifications_enabled = 1 AND lat IS NOT NULL AND lon IS NOT NULL")
+        caretakers = cursor.fetchall()
+        
+        for caretaker in caretakers:
             dist = self._haversine_distance(pet_data["lat"], pet_data["lon"], caretaker["lat"], caretaker["lon"])
             if dist <= radius_km:
-                # RF 3.2: Verificar restricciones de servicio (especies aceptadas)
-                species_accepted = caretaker.get("species_accepted", [])
+                species_raw = caretaker.get("species_accepted", "") or ""
+                species_accepted = [s.strip().lower() for s in species_raw.split(",") if s.strip()]
                 pet_species = pet_data.get("species", "").lower()
                 
-                # Si acepta la especie o la lista está vacía, se le alerta
-                if not species_accepted or any(s.lower() in pet_species for s in species_accepted):
+                if not species_accepted or any(s in pet_species for s in species_accepted):
                     subject.register_observer(
                         CaretakerObserver(
-                            observer_id=str(caretaker["_id"]),
+                            observer_id=str(caretaker["id"]),
                             email=caretaker["email"],
                             lat=caretaker["lat"],
                             lon=caretaker["lon"],
@@ -72,9 +83,7 @@ class AlertNotificationFacade:
                         )
                     )
 
-        # 5. Disparar notificaciones concurrentes (RNF 1.1 - <5 segundos)
-        await subject.notify_observers(pet_data)
+        # 5. Notify observers
+        subject.notify_observers(self.conn, pet_data)
 
-        # Formatear el ID para retorno JSON
-        pet_data["_id"] = str(pet_data["_id"])
         return pet_data

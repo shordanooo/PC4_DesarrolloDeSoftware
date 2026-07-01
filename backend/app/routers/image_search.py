@@ -12,14 +12,13 @@ from app.patterns.behavioral.strategy import (
 router = APIRouter(prefix="/api/image-search", tags=["Image Search"])
 
 @router.post("")
-async def search_by_image(
+def search_by_image(
     intent: str = Form(...),
     file: UploadFile = File(...),
     db=Depends(get_db)
 ):
     intent_clean = intent.strip().lower()
     
-    # RF 2.2: Obliga al usuario a seleccionar una de tres intenciones
     if "adop" in intent_clean:
         strategy = AdopcionSearchStrategy()
     elif "vent" in intent_clean:
@@ -33,25 +32,22 @@ async def search_by_image(
         )
         
     try:
-        # RF 2.1: Interfaz para cargar un archivo de imagen
-        image_bytes = await file.read()
+        image_bytes = file.file.read()
         
-        # RNF 2.1 & Adapter: Adaptar motor externo y generar metadatos estándar (JSON)
         legacy_engine = ExternalLegacyPetSearchEngine()
         adapter = ImageSearchAdapter(legacy_engine)
         
-        # El adaptador retorna el JSON estandarizado
-        standard_metadata = await adapter.find_matches(image_bytes)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        standard_metadata = loop.run_until_complete(adapter.find_matches(image_bytes))
         
-        # Simplificación de búsqueda (mapea especie y raza detectada para filtrar)
         search_filter = {
             "species": standard_metadata.get("detected_species"),
             "breed": standard_metadata.get("detected_breed")
         }
         
-        # Strategy: Ejecutar estrategia de búsqueda según la intención (RF 2.3, 2.4, 2.5)
         context = SearchContext(strategy)
-        results = await context.execute_search(search_filter, db)
+        results = context.execute_search(search_filter, db)
         
         return {
             "intent": intent,

@@ -9,22 +9,21 @@ class AlertObserver(ABC):
         self.lon = lon
 
     @abstractmethod
-    async def update(self, lost_pet_report: Dict[str, Any]) -> None:
+    def update(self, conn, lost_pet_report: Dict[str, Any]) -> None:
         pass
 
 class UserObserver(AlertObserver):
-    async def update(self, lost_pet_report: Dict[str, Any]) -> None:
-        from app.config.db import get_db
-        db = get_db()
-        notification = {
-            "recipient_id": self.observer_id,
-            "recipient_type": "user",
-            "type": "lost_pet_alert",
-            "message": f"¡Alerta! Mascota perdida cerca de tu ubicación: {lost_pet_report['name']} ({lost_pet_report['species']})",
-            "lost_pet_id": str(lost_pet_report["_id"]),
-            "read": False
-        }
-        await db.notifications.insert_one(notification)
+    def update(self, conn, lost_pet_report: Dict[str, Any]) -> None:
+        cursor = conn.cursor()
+        message = f"¡Alerta! Mascota perdida cerca de tu ubicación: {lost_pet_report['name']} ({lost_pet_report['species']})"
+        cursor.execute(
+            """
+            INSERT INTO notifications (recipient_id, recipient_type, type, message, lost_pet_id, is_read)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (str(self.observer_id), "user", "lost_pet_alert", message, str(lost_pet_report["id"]), False)
+        )
+        conn.commit()
         print(f"[Notifier] Sent push notification to User {self.email} for pet {lost_pet_report['name']}")
 
 class CaretakerObserver(AlertObserver):
@@ -32,18 +31,17 @@ class CaretakerObserver(AlertObserver):
         super().__init__(observer_id, email, lat, lon)
         self.role = role
 
-    async def update(self, lost_pet_report: Dict[str, Any]) -> None:
-        from app.config.db import get_db
-        db = get_db()
-        notification = {
-            "recipient_id": self.observer_id,
-            "recipient_type": "caretaker",
-            "type": "lost_pet_alert",
-            "message": f"¡Alerta Cuidador ({self.role})! Mascota perdida en tu área de servicio: {lost_pet_report['name']}",
-            "lost_pet_id": str(lost_pet_report["_id"]),
-            "read": False
-        }
-        await db.notifications.insert_one(notification)
+    def update(self, conn, lost_pet_report: Dict[str, Any]) -> None:
+        cursor = conn.cursor()
+        message = f"¡Alerta Cuidador ({self.role})! Mascota perdida en tu área de servicio: {lost_pet_report['name']}"
+        cursor.execute(
+            """
+            INSERT INTO notifications (recipient_id, recipient_type, type, message, lost_pet_id, is_read)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (str(self.observer_id), "caretaker", "lost_pet_alert", message, str(lost_pet_report["id"]), False)
+        )
+        conn.commit()
         print(f"[Notifier] Sent alert to Caretaker ({self.role}) {self.email} for pet {lost_pet_report['name']}")
 
 class LostPetSubject:
@@ -56,8 +54,6 @@ class LostPetSubject:
     def remove_observer(self, observer: AlertObserver) -> None:
         self._observers.remove(observer)
 
-    async def notify_observers(self, lost_pet_report: Dict[str, Any]) -> None:
-        import asyncio
-        tasks = [observer.update(lost_pet_report) for observer in self._observers]
-        if tasks:
-            await asyncio.gather(*tasks)
+    def notify_observers(self, conn, lost_pet_report: Dict[str, Any]) -> None:
+        for observer in self._observers:
+            observer.update(conn, lost_pet_report)

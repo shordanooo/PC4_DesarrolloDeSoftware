@@ -1,21 +1,21 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.config.db import MongoDBManager, get_db
+from app.config.db import SQLiteManager, get_db
 from app.routers import lost_pets, image_search, caretakers
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Singleton: Conectar a MongoDB al iniciar
-    db_manager = MongoDBManager()
+    # Singleton: Conectar a SQLite al iniciar
+    db_manager = SQLiteManager()
     db_manager.connect()
     yield
     # Cerrar conexión al apagar
     db_manager.close()
 
 app = FastAPI(
-    title="Pet Alert & Caretaker Platform API",
-    description="Backend API con soporte para 6 patrones GoF",
+    title="PetMatch & Alert API",
+    description="Backend API con soporte para SQLite y 6 patrones GoF",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -34,139 +34,98 @@ app.include_router(image_search.router)
 app.include_router(caretakers.router)
 
 @app.get("/")
-async def root():
-    return {"message": "API de Reporte de Mascotas y Cuidadores lista."}
+def root():
+    return {"message": "API de PetMatch & Alert lista."}
 
 @app.post("/api/seed")
-async def seed_database(db=Depends(get_db)):
-    # Limpiar base de datos
-    await db.searchable_pets.delete_many({})
-    await db.lost_pets.delete_many({})
-    await db.caretakers.delete_many({})
-    await db.users.delete_many({})
-    await db.notifications.delete_many({})
-    await db.sightings.delete_many({})
+def seed_database(db=Depends(get_db)):
+    try:
+        cursor = db.cursor()
+        
+        # En SQLite usamos DELETE FROM en vez de TRUNCATE
+        cursor.execute("DELETE FROM reviews")
+        cursor.execute("DELETE FROM sightings")
+        cursor.execute("DELETE FROM lost_pets")
+        cursor.execute("DELETE FROM caretakers")
+        cursor.execute("DELETE FROM users")
+        cursor.execute("DELETE FROM notifications")
+        cursor.execute("DELETE FROM searchable_pets")
+        db.commit()
 
-    # 1. Usuarios para notificaciones en un radio
-    mock_users = [
-        {"email": "vecino.cercano1@gmail.com", "lat": -12.0465, "lon": -77.0428}, # Aprox 30 metros (Recibirá alerta)
-        {"email": "vecino.cercano2@gmail.com", "lat": -12.0490, "lon": -77.0450}, # Aprox 400 metros (Recibirá alerta)
-        {"email": "vecino.lejano@gmail.com", "lat": -12.1000, "lon": -77.0800},   # Aprox 7 km (No recibirá alerta)
-    ]
-    await db.users.insert_many(mock_users)
+        # 1. Poblar usuarios vecinos
+        mock_users = [
+            ("vecino.cercano1@gmail.com", -12.0465, -77.0428), # Aprox 30m
+            ("vecino.cercano2@gmail.com", -12.0490, -77.0450), # Aprox 400m
+            ("vecino.lejano@gmail.com", -12.1000, -77.0800),   # Aprox 7 km
+        ]
+        cursor.executemany("INSERT INTO users (email, lat, lon) VALUES (?, ?, ?)", mock_users)
 
-    # 2. Cuidadores con restricciones y toggle de alertas
-    mock_caretakers = [
-        {
-            "name": "Carlos Gomez (Solidario)",
-            "email": "carlos.solidario@gmail.com",
-            "role": "Cuidador Solidario",
-            "lat": -12.0470,
-            "lon": -77.0430, # Aprox 100m
-            "species_accepted": ["Perro", "Gato"],
-            "sizes_accepted": ["pequeño", "mediano"],
-            "administers_medication": False,
-            "is_verified": True,
-            "alert_notifications_enabled": True, # Alertas ON (Recibirá alerta)
-            "ratings": [{"score": 5, "comment": "Excelente cuidador, muy cariñoso.", "verified": True}],
-            "id_document": "DNI12345678"
-        },
-        {
-            "name": "Ana Perez (Especializada)",
-            "email": "ana.especializada@gmail.com",
-            "role": "Cuidador Especializado",
-            "lat": -12.0450,
-            "lon": -77.0410, # Aprox 200m
-            "species_accepted": ["Perro"], # Solo perros
-            "sizes_accepted": ["pequeño", "mediano", "grande"],
-            "administers_medication": True, # Puede dar medicinas
-            "is_verified": True, # Verificada públicamente
-            "alert_notifications_enabled": True, # Alertas ON (Recibirá alerta si la mascota es un perro)
-            "ratings": [
-                {"score": 5, "comment": "Muy profesional e instruida.", "verified": True},
-                {"score": 4, "comment": "Muy buen servicio.", "verified": True}
-            ],
-            "id_document": "DNI87654321"
-        },
-        {
-            "name": "Luis Lopez (Alertas Desactivadas)",
-            "email": "luis.profesional@gmail.com",
-            "role": "Cuidador Profesional",
-            "lat": -12.0460,
-            "lon": -77.0420, # Aprox 60m
-            "species_accepted": ["Perro"],
-            "sizes_accepted": ["pequeño"],
-            "administers_medication": False,
-            "is_verified": True,
-            "alert_notifications_enabled": False, # Alertas OFF (No recibirá alerta)
-            "ratings": [],
-            "id_document": "DNI55555555"
-        }
-    ]
-    await db.caretakers.insert_many(mock_caretakers)
+        # 2. Poblar cuidadores de mascotas
+        cursor.execute(
+            """
+            INSERT INTO caretakers (name, email, role, lat, lon, species_accepted, sizes_accepted, administers_medication, is_verified, alert_notifications_enabled, id_document)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Carlos Gomez (Solidario)", "carlos.solidario@gmail.com", "Cuidador Solidario", -12.0470, -77.0430, "Perro, Gato", "pequeño, mediano", 0, 1, 1, "DNI12345678")
+        )
+        carlos_id = cursor.lastrowid
+        
+        # Insert review for Carlos
+        cursor.execute(
+            """
+            INSERT INTO reviews (caretaker_id, score, comment, reviewer_name, verified)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (carlos_id, 5, "Excelente cuidador, muy cariñoso.", "Ana S.", 1)
+        )
 
-    # 3. Base de datos para el buscador por imagen
-    mock_searchable_pets = [
-        # ONGs / Albergues
-        {
-            "name": "Rocky",
-            "species": "Perro",
-            "breed": "Golden Retriever",
-            "source_type": "ong_shelter",
-            "source_name": "Albergue Patitas Felices",
-            "age": "2 años",
-            "photo": "https://images.unsplash.com/photo-1552053831-71594a27632d",
-            "description": "Muy cariñoso, ideal para adopción en una casa con patio."
-        },
-        {
-            "name": "Michi",
-            "species": "Gato",
-            "breed": "Persa",
-            "source_type": "ong_shelter",
-            "source_name": "ONG Gatos de la Calle",
-            "age": "1 año",
-            "photo": "https://images.unsplash.com/photo-1614035030394-b6e5b01e0737",
-            "description": "Gato persa rescatado, muy tranquilo."
-        },
-        # Criaderos Certificados
-        {
-            "name": "Kaiser",
-            "species": "Perro",
-            "breed": "Golden Retriever",
-            "source_type": "certified_breeder",
-            "source_name": "Criadero Golden Elite",
-            "age": "3 meses",
-            "photo": "https://images.unsplash.com/photo-1552053831-71594a27632d",
-            "description": "Cachorro con pedigree de alta calidad."
-        },
-        {
-            "name": "Max",
-            "species": "Perro",
-            "breed": "Siberian Husky",
-            "source_type": "certified_breeder",
-            "source_name": "Criadero Wolfpack",
-            "age": "2 meses",
-            "photo": "https://images.unsplash.com/photo-1531804055935-76f44d7c3621",
-            "description": "Certificado de vacunas al día, criadero certificado."
-        }
-    ]
-    await db.searchable_pets.insert_many(mock_searchable_pets)
+        # ana.especializada@gmail.com
+        cursor.execute(
+            """
+            INSERT INTO caretakers (name, email, role, lat, lon, species_accepted, sizes_accepted, administers_medication, is_verified, alert_notifications_enabled, id_document)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Ana Perez (Especializada)", "ana.especializada@gmail.com", "Cuidador Especializado", -12.0450, -77.0410, "Perro", "pequeño, mediano, grande", 1, 1, 1, "DNI87654321")
+        )
+        ana_id = cursor.lastrowid
 
-    # 4. Alerta activa de mascota perdida
-    mock_lost_pets = [
-        {
-            "name": "Fido",
-            "species": "Perro",
-            "breed": "Golden Retriever",
-            "description": "Golden retriever con collar rojo. Se asustó con los cohetes.",
-            "lat": -12.0460,
-            "lon": -77.0425,
-            "photo": "https://images.unsplash.com/photo-1552053831-71594a27632d",
-            "status": "lost",
-            "owner_id": "owner_12345",
-            "sightings": []
-        }
-    ]
-    await db.lost_pets.insert_many(mock_lost_pets)
+        cursor.execute("INSERT INTO reviews (caretaker_id, score, comment, reviewer_name, verified) VALUES (?, ?, ?, ?, ?)", (ana_id, 5, "Muy profesional e instruida.", "Roberto F.", 1))
+        cursor.execute("INSERT INTO reviews (caretaker_id, score, comment, reviewer_name, verified) VALUES (?, ?, ?, ?, ?)", (ana_id, 4, "Muy buen servicio.", "Sonia T.", 1))
 
-    return {"status": "success", "message": "Base de datos inicializada con datos de prueba."}
+        # luis.profesional@gmail.com
+        cursor.execute(
+            """
+            INSERT INTO caretakers (name, email, role, lat, lon, species_accepted, sizes_accepted, administers_medication, is_verified, alert_notifications_enabled, id_document)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Luis Lopez (Alertas Desactivadas)", "luis.profesional@gmail.com", "Cuidador Profesional", -12.0460, -77.0420, "Perro", "pequeño", 0, 1, 0, "DNI55555555")
+        )
+
+        # 3. Poblar catálogo del buscador por imagen
+        mock_searchable_pets = [
+            ("Rocky", "Perro", "Golden Retriever", "ong_shelter", "Albergue Patitas Felices", "2 años", "https://images.unsplash.com/photo-1552053831-71594a27632d", "Muy cariñoso, ideal para adopción en una casa con patio."),
+            ("Michi", "Gato", "Persa", "ong_shelter", "ONG Gatos de la Calle", "1 año", "https://images.unsplash.com/photo-1614035030394-b6e5b01e0737", "Gato persa rescatado, muy tranquilo."),
+            ("Kaiser", "Perro", "Golden Retriever", "certified_breeder", "Criadero Golden Elite", "3 meses", "https://images.unsplash.com/photo-1552053831-71594a27632d", "Cachorro con pedigree de alta calidad."),
+            ("Max", "Perro", "Siberian Husky", "certified_breeder", "Criadero Wolfpack", "2 meses", "https://images.unsplash.com/photo-1531804055935-76f44d7c3621", "Certificado de vacunas al día, criadero certificado.")
+        ]
+        cursor.executemany(
+            """
+            INSERT INTO searchable_pets (name, species, breed, source_type, source_name, age, photo, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            mock_searchable_pets
+        )
+
+        # 4. Poblar una alerta activa de mascota perdida
+        cursor.execute(
+            """
+            INSERT INTO lost_pets (name, species, breed, description, lat, lon, photo, status, owner_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Fido", "Perro", "Golden Retriever", "Golden retriever con collar rojo. Se asustó con los cohetes.", -12.0460, -77.0425, "https://images.unsplash.com/photo-1552053831-71594a27632d", "lost", "owner_12345")
+        )
+        db.commit()
+
+        return {"status": "success", "message": "SQLite Database seeded successfully!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

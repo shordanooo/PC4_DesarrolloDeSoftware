@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Any
 
 class LostPetCreate(BaseModel):
     name: str
@@ -12,7 +12,7 @@ class LostPetCreate(BaseModel):
     owner_id: str
 
 class SightingCreate(BaseModel):
-    lost_pet_id: Optional[str] = None
+    lost_pet_id: Optional[Any] = None
     lat: float
     lon: float
     photo: str  # Base64 string or URL
