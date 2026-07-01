@@ -11,70 +11,6 @@ L.Icon.Default.mergeOptions({
 
 const API_BASE = 'http://localhost:8000';
 
-// Fallback data when MySQL/SQLite is offline
-const MOCK_PETS = [
-  {
-    id: 1,
-    name: "Fido (Demo)",
-    species: "Perro",
-    breed: "Golden Retriever",
-    description: "Perro dócil con collar rojo. Se extravió cerca a la plaza principal.",
-    lat: -12.0463,
-    lon: -77.0427,
-    photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400",
-    status: "lost",
-    sightings: []
-  }
-];
-
-const MOCK_CARETAKERS = [
-  {
-    id: 1,
-    name: "Carlos Gomez (Demo)",
-    email: "carlos.solidario@gmail.com",
-    role: "Cuidador Solidario",
-    lat: -12.0470,
-    lon: -77.0430,
-    species_accepted: ["Perro", "Gato"],
-    sizes_accepted: ["pequeño", "mediano"],
-    administers_medication: false,
-    is_verified: true,
-    alert_notifications_enabled: true,
-    ratings: [{"score": 5, "comment": "Excelente trato, muy puntual.", "verified": true}],
-    average_rating: 5.0,
-    role_rules: {
-      max_pets: 2,
-      max_sizes: ["pequeño", "mediano"],
-      allow_payment: false,
-      requires_certification: false
-    }
-  },
-  {
-    id: 2,
-    name: "Ana Perez (Veterinaria Demo)",
-    email: "ana.especializada@gmail.com",
-    role: "Cuidador Especializado",
-    lat: -12.0450,
-    lon: -77.0410,
-    species_accepted: ["Perro"],
-    sizes_accepted: ["pequeño", "mediano", "grande"],
-    administers_medication: true,
-    is_verified: true,
-    alert_notifications_enabled: true,
-    ratings: [
-      {"score": 5, "comment": "Muy profesional e instruida.", "verified": true},
-      {"score": 4, "comment": "Buen trato con cachorros.", "verified": true}
-    ],
-    average_rating: 4.5,
-    role_rules: {
-      max_pets: 10,
-      max_sizes: ["pequeño", "mediano", "grande", "gigante"],
-      allow_payment: true,
-      requires_certification: true
-    }
-  }
-];
-
 // Leaflet Map Selector Component for forms
 function LeafletMapSelector({ lat, lon, onChange }) {
   const mapRef = useRef(null);
@@ -305,7 +241,7 @@ function CooperatingPetsIcon() {
 
 export default function App() {
   const [tab, setTab] = useState('lost_pets');
-  const [isBackendOnline, setIsBackendOnline] = useState(false);
+  const [isBackendOnline, setIsBackendOnline] = useState(true);
   const [loading, setLoading] = useState(false);
   const [tickerMessage, setTickerMessage] = useState('Buscando alertas de mascotas perdidas...');
 
@@ -374,36 +310,16 @@ export default function App() {
     reviewer_name: ''
   });
 
-  // Check connection and load data
+  // Load data from backend on startup
   useEffect(() => {
-    checkBackend();
+    fetchData();
   }, []);
-
-  const checkBackend = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/`);
-      if (res.ok) {
-        setIsBackendOnline(true);
-        fetchData();
-      } else {
-        loadMockData();
-      }
-    } catch {
-      loadMockData();
-    }
-  };
-
-  const loadMockData = () => {
-    setIsBackendOnline(false);
-    setLostPets(MOCK_PETS);
-    setCaretakers(MOCK_CARETAKERS);
-    setTickerMessage('Modo simulación: Conecta tu base de datos de SQLite en backend/.env.');
-  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const petsRes = await fetch(`${API_BASE}/api/lost-pets`);
+      if (!petsRes.ok) throw new Error("Error fetching lost pets");
       const petsData = await petsRes.json();
       setLostPets(petsData);
 
@@ -415,33 +331,15 @@ export default function App() {
       }
 
       const careRes = await fetch(`${API_BASE}/api/caretakers`);
+      if (!careRes.ok) throw new Error("Error fetching caretakers");
       const careData = await careRes.json();
       setCaretakers(careData.filter(c => c.is_verified));
       setUnverifiedCaretakers(careData.filter(c => !c.is_verified));
-      
       setIsBackendOnline(true);
-    } catch {
-      loadMockData();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSeed = async () => {
-    if (!isBackendOnline) {
-      alert("No hay conexión con el backend. Modifica backend/.env con tu enlace de conexión MYSQL_URI y corre 'python run.py'");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/seed`, { method: 'POST' });
-      if (res.ok) {
-        alert("¡Base de datos MySQL/SQLite inicializada con datos semilla con éxito!");
-        await fetchData();
-      }
     } catch (e) {
       console.error(e);
-      alert("Error al inicializar la base de datos.");
+      setIsBackendOnline(false);
+      setTickerMessage('⚠️ Error de conexión: Por favor asegúrate de iniciar el backend con "python run.py"');
     } finally {
       setLoading(false);
     }
@@ -491,7 +389,7 @@ export default function App() {
     }
   };
 
-  // 1. Register Lost Pet
+  // 1. Register Lost Pet via API
   const handleCreateLostPet = async (e) => {
     e.preventDefault();
     if (!currentUser) {
@@ -507,19 +405,6 @@ export default function App() {
       ...petForm,
       owner_id: currentUser.id
     };
-
-    if (!isBackendOnline) {
-      const newPet = {
-        id: Date.now(),
-        ...payload,
-        status: "lost",
-        sightings: []
-      };
-      setLostPets(prev => [...prev, newPet]);
-      setTickerMessage(`🚨 ÚLTIMA ALERTA: ${newPet.name} (${newPet.breed}) reportado en lat: ${newPet.lat}, lon: ${newPet.lon}`);
-      alert("Mascota reportada con éxito (Modo simulación local).");
-      return;
-    }
 
     try {
       setLoading(true);
@@ -541,16 +426,19 @@ export default function App() {
           owner_id: ''
         });
         await fetchData();
+      } else {
+        const errorData = await res.json();
+        alert(`Error al registrar mascota: ${errorData.detail || 'Error desconocido'}`);
       }
     } catch (e) {
       console.error(e);
-      alert("Error al reportar mascota.");
+      alert("Error de red al intentar reportar la mascota.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Anonymous Sighting
+  // 2. Anonymous Sighting via API
   const handleCreateSighting = async (e) => {
     e.preventDefault();
     if (!sightingForm.photo) {
@@ -561,21 +449,6 @@ export default function App() {
       lost_pet_id: petId,
       ...sightingForm
     };
-
-    if (!isBackendOnline) {
-      setLostPets(prev => prev.map(p => {
-        if ((p.id || p._id) === petId) {
-          return {
-            ...p,
-            sightings: [...(p.sightings || []), { id: Date.now(), ...sightingForm }]
-          };
-        }
-        return p;
-      }));
-      alert("Avistamiento reportado de forma anónima.");
-      setSelectedPetForSighting(null);
-      return;
-    }
 
     try {
       setLoading(true);
@@ -589,47 +462,22 @@ export default function App() {
         setSightingForm({ lat: -12.0463, lon: -77.0427, photo: '', description: '' });
         setSelectedPetForSighting(null);
         await fetchData();
+      } else {
+        alert("Error al reportar avistamiento.");
       }
     } catch (e) {
       console.error(e);
-      alert("Error al registrar avistamiento.");
+      alert("Error al conectar con el servidor.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Image Search
+  // 3. Image Search via API
   const handleImageSearchSubmit = async (e) => {
     e.preventDefault();
     if (!searchForm.file && !searchForm.previewUrl) {
       alert("Por favor selecciona una imagen.");
-      return;
-    }
-
-    if (!isBackendOnline) {
-      let mockResults = [];
-      if (searchForm.intent === "Adopción") {
-        mockResults = [
-          { id: 101, name: "Rocky (Refugio)", species: "Perro", breed: "Golden Retriever", source_type: "ong_shelter", source_name: "Albergue Patitas Felices", age: "2 años", photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=200", description: "Cariñoso, listo para adoptar." }
-        ];
-      } else if (searchForm.intent === "Venta") {
-        mockResults = [
-          { id: 102, name: "Kaiser (Criadero)", species: "Perro", breed: "Golden Retriever", source_type: "certified_breeder", source_name: "Criadero Golden Elite", age: "3 meses", photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=200", description: "Pedigree certificado y vacunas al día." }
-        ];
-      } else {
-        mockResults = lostPets.filter(p => p.breed.toLowerCase().includes("golden") || p.species.toLowerCase().includes("perro"));
-      }
-
-      setSearchResults({
-        intent: searchForm.intent,
-        detected_metadata: {
-          detected_species: "Perro",
-          detected_breed: "Golden Retriever",
-          confidence: 0.98,
-          engine_version: "Adapter-v1.0"
-        },
-        results: mockResults
-      });
       return;
     }
 
@@ -652,16 +500,18 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSearchResults(data);
+      } else {
+        alert("Error al procesar la búsqueda por imagen.");
       }
     } catch (e) {
       console.error(e);
-      alert("Error al realizar la búsqueda.");
+      alert("Error al conectar con el servidor.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 4. Caretakers
+  // 4. Caretakers via API
   const handleRegisterCaretaker = async (e) => {
     e.preventDefault();
     if (!caretakerForm.id_document) {
@@ -674,43 +524,6 @@ export default function App() {
       species_accepted: caretakerForm.species_accepted.split(',').map(s => s.trim()),
       sizes_accepted: caretakerForm.sizes_accepted.split(',').map(s => s.trim()),
     };
-
-    if (!isBackendOnline) {
-      const newCaretaker = {
-        id: Date.now(),
-        ...payload,
-        is_verified: false,
-        ratings: [],
-        average_rating: 0.0,
-        role_rules: {
-          max_pets: payload.role === "Cuidador Especializado" ? 10 : (payload.role === "Cuidador Profesional" ? 5 : 2),
-          allow_payment: payload.role !== "Cuidador Solidario",
-          requires_certification: payload.role === "Cuidador Especializado"
-        }
-      };
-      setUnverifiedCaretakers(prev => [...prev, newCaretaker]);
-      alert("Registro completado. Tu perfil se activará tras validar tu DNI.");
-      
-      setCurrentUser({
-        email: payload.email,
-        role: 'Cuidador',
-        id: newCaretaker.id,
-        name: payload.name
-      });
-
-      setCaretakerForm({
-        name: '',
-        email: '',
-        role: 'Cuidador Solidario',
-        lat: -12.0463,
-        lon: -77.0427,
-        species_accepted: 'Perro, Gato',
-        sizes_accepted: 'pequeño, mediano',
-        administers_medication: false,
-        id_document: ''
-      });
-      return;
-    }
 
     try {
       setLoading(true);
@@ -741,36 +554,32 @@ export default function App() {
           id_document: ''
         });
         await fetchData();
+      } else {
+        const errorData = await res.json();
+        alert(`Error al registrar cuidador: ${errorData.detail || 'Error en el servidor'}`);
       }
     } catch (e) {
       console.error(e);
-      alert(e.message || "Error al registrar cuidador.");
+      alert("Error al conectar con el servidor.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleVerifyCaretaker = async (id) => {
-    if (!isBackendOnline) {
-      const caregiver = unverifiedCaretakers.find(c => (c.id || c._id) === id);
-      if (caregiver) {
-        caregiver.is_verified = true;
-        setUnverifiedCaretakers(prev => prev.filter(c => (c.id || c._id) !== id));
-        setCaretakers(prev => [...prev, caregiver]);
-      }
-      return;
-    }
-
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE}/api/caretakers/${id}/verify`, { method: 'POST' });
       if (res.ok) {
         alert("Perfil verificado con éxito.");
         await fetchData();
+      } else {
+        const errorData = await res.json();
+        alert(`Error al verificar cuidador: ${errorData.detail}`);
       }
     } catch (e) {
       console.error(e);
-      alert("Error al verificar cuidador.");
+      alert("Error al conectar con el servidor.");
     } finally {
       setLoading(false);
     }
@@ -778,16 +587,6 @@ export default function App() {
 
   const handleToggleAlerts = async (caretaker, enabled) => {
     const caretakerId = caretaker.id || caretaker._id;
-    if (!isBackendOnline) {
-      setCaretakers(prev => prev.map(c => {
-        if ((c.id || c._id) === caretakerId) {
-          return { ...c, alert_notifications_enabled: enabled };
-        }
-        return c;
-      }));
-      return;
-    }
-
     try {
       const res = await fetch(`${API_BASE}/api/caretakers/${caretakerId}/toggle-alerts?enabled=${enabled}`, {
         method: 'PUT'
@@ -812,20 +611,6 @@ export default function App() {
       verified: true
     };
 
-    if (!isBackendOnline) {
-      setCaretakers(prev => prev.map(c => {
-        if ((c.id || c._id) === caretakerId) {
-          const newRatings = [...(c.ratings || []), payload];
-          const verified = newRatings.filter(r => r.verified);
-          const newAvg = verified.length ? parseFloat((verified.reduce((acc, curr) => acc + curr.score, 0) / verified.length).toFixed(1)) : 0.0;
-          return { ...c, ratings: newRatings, average_rating: newAvg };
-        }
-        return c;
-      }));
-      setReviewForm({ score: 5, comment: '', reviewer_name: '' });
-      return;
-    }
-
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE}/api/caretakers/${caretakerId}/reviews`, {
@@ -836,10 +621,12 @@ export default function App() {
       if (res.ok) {
         setReviewForm({ score: 5, comment: '', reviewer_name: '' });
         await fetchData();
+      } else {
+        alert("Error al registrar reseña.");
       }
     } catch (e) {
       console.error(e);
-      alert("Error al registrar reseña.");
+      alert("Error al conectar con el servidor.");
     } finally {
       setLoading(false);
     }
@@ -938,9 +725,7 @@ export default function App() {
         <footer className="discreet-footer" style={{ marginTop: '2rem' }}>
           <div>© 2026 PetMatch & Alert. Todos los derechos reservados.</div>
           <div>
-            <button className="btn-link-seed" onClick={handleSeed}>
-              Cargar Base de Datos Semilla (MySQL/SQLite)
-            </button>
+            <span style={{ color: 'var(--text-muted)' }}>SQLite Database Online</span>
           </div>
         </footer>
       </div>
@@ -999,6 +784,12 @@ export default function App() {
         <div className="ticker-label">Última Alerta</div>
         <marquee className="ticker-content" scrollamount="3">{tickerMessage}</marquee>
       </div>
+
+      {!isBackendOnline && (
+        <div style={{ background: 'rgba(255, 51, 51, 0.15)', border: '1px solid var(--accent-red)', padding: '1rem', borderRadius: '8px', color: '#ff9999', marginBottom: '1.5rem', textAlign: 'left' }}>
+          <strong>⚠️ Servidor backend offline:</strong> Por favor asegúrate de iniciar el backend ejecutando <code>python run.py</code> en la carpeta <code>backend</code>.
+        </div>
+      )}
 
       {loading && <div style={{ color: 'var(--mongo-green)', marginBottom: '1.25rem', fontWeight: 600 }}>Cargando operación...</div>}
 
@@ -1549,7 +1340,7 @@ export default function App() {
                         )}
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', justifycontent: 'space-between' }}>
                         <div className="switch-container">
                           <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>🔔 Alertas Geográficas (Mascotas Perdidas)</span>
                           <label className="switch">
@@ -1665,9 +1456,7 @@ export default function App() {
       <footer className="discreet-footer">
         <div>© 2026 PetMatch & Alert. Todos los derechos reservados.</div>
         <div>
-          <button className="btn-link-seed" onClick={handleSeed}>
-            Cargar Datos de Semilla (MySQL/SQLite)
-          </button>
+          <span style={{ color: 'var(--text-muted)' }}>Base de datos SQLite integrada</span>
         </div>
       </footer>
     </div>
