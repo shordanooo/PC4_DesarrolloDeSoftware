@@ -1,17 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+
+// Fix Default Icon paths using CDN URLs to avoid bundler issues
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 const API_BASE = 'http://localhost:8000';
 
-// Fallback data when backend is not running or offline
+// Fallback data when backend is offline
 const MOCK_PETS = [
   {
     _id: "mock-pet-1",
-    name: "Fido (Mock)",
+    name: "Fido (Demo)",
     species: "Perro",
     breed: "Golden Retriever",
-    description: "Golden retriever con collar rojo. Se asustó con los cohetes.",
-    lat: -12.0460,
-    lon: -77.0425,
+    description: "Perro dócil con collar rojo. Se extravió cerca a la plaza principal.",
+    lat: -12.0463,
+    lon: -77.0427,
     photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400",
     status: "lost",
     sightings: []
@@ -21,7 +30,7 @@ const MOCK_PETS = [
 const MOCK_CARETAKERS = [
   {
     _id: "mock-care-1",
-    name: "Carlos Gomez (Mock Solidario)",
+    name: "Carlos Gomez (Demo)",
     email: "carlos.solidario@gmail.com",
     role: "Cuidador Solidario",
     lat: -12.0470,
@@ -31,7 +40,7 @@ const MOCK_CARETAKERS = [
     administers_medication: false,
     is_verified: true,
     alert_notifications_enabled: true,
-    ratings: [{"score": 5, "comment": "Excelente cuidador, muy cariñoso.", "verified": True}],
+    ratings: [{"score": 5, "comment": "Excelente trato, muy puntual.", "verified": true}],
     average_rating: 5.0,
     role_rules: {
       max_pets: 2,
@@ -42,7 +51,7 @@ const MOCK_CARETAKERS = [
   },
   {
     _id: "mock-care-2",
-    name: "Ana Perez (Mock Especializada)",
+    name: "Ana Perez (Veterinaria Demo)",
     email: "ana.especializada@gmail.com",
     role: "Cuidador Especializado",
     lat: -12.0450,
@@ -53,8 +62,8 @@ const MOCK_CARETAKERS = [
     is_verified: true,
     alert_notifications_enabled: true,
     ratings: [
-      {"score": 5, "comment": "Muy profesional e instruida.", "verified": True},
-      {"score": 4, "comment": "Muy buen servicio.", "verified": True}
+      {"score": 5, "comment": "Muy profesional e instruida.", "verified": true},
+      {"score": 4, "comment": "Buen trato con cachorros.", "verified": true}
     ],
     average_rating: 4.5,
     role_rules: {
@@ -66,25 +75,122 @@ const MOCK_CARETAKERS = [
   }
 ];
 
+// Leaflet Map Selector Component for forms
+function LeafletMapSelector({ lat, lon, onChange }) {
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const mapInstance = useRef(null);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Initialize map centered at current coordinates
+    const map = L.map(mapRef.current).setView([lat, lon], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    mapInstance.current = map;
+
+    // Add draggable marker
+    const marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+    markerRef.current = marker;
+
+    // Listen to drag events
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      onChange(parseFloat(pos.lat.toFixed(6)), parseFloat(pos.lng.toFixed(6)));
+    });
+
+    // Listen to map click events
+    map.on('click', (e) => {
+      marker.setLatLng(e.latlng);
+      onChange(parseFloat(e.latlng.lat.toFixed(6)), parseFloat(e.latlng.lng.toFixed(6)));
+    });
+
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+    };
+  }, []);
+
+  // Update marker position if coordinates change externally
+  useEffect(() => {
+    if (markerRef.current && mapInstance.current) {
+      const currentPos = markerRef.current.getLatLng();
+      if (currentPos.lat !== lat || currentPos.lng !== lon) {
+        markerRef.current.setLatLng([lat, lon]);
+        mapInstance.current.setView([lat, lon]);
+      }
+    }
+  }, [lat, lon]);
+
+  return <div ref={mapRef} className="map-container" />;
+}
+
+// Leaflet Read-only Map displaying all active alerts
+function LeafletAlertsMap({ pets }) {
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markersRef = useRef([]);
+
+  useEffect(() => {
+    if (!mapRef.current || pets.length === 0) return;
+
+    const centerLat = pets[0].lat;
+    const centerLon = pets[0].lon;
+
+    const map = L.map(mapRef.current).setView([centerLat, centerLon], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    mapInstance.current = map;
+
+    // Add markers
+    pets.forEach(p => {
+      const marker = L.marker([p.lat, p.lon])
+        .addTo(map)
+        .bindPopup(`
+          <div style="font-family: sans-serif; font-size: 0.85rem; text-align: left;">
+            <strong style="font-size: 1rem; color: #008060;">${p.name}</strong><br/>
+            <b>Raza:</b> ${p.breed}<br/>
+            <b>Descripción:</b> ${p.description}
+          </div>
+        `);
+      markersRef.current.push(marker);
+    });
+
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+      markersRef.current = [];
+    };
+  }, [pets]);
+
+  return <div ref={mapRef} className="map-container" style={{ height: '300px', marginBottom: '1.5rem' }} />;
+}
+
 export default function App() {
-  const [tab, setTab] = useState('inicio');
+  const [tab, setTab] = useState('perdidos'); // Default tab is perdidos
   const [isBackendOnline, setIsBackendOnline] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [tickerMessage, setTickerMessage] = useState('Ninguna alerta reciente.');
+  const [tickerMessage, setTickerMessage] = useState('Buscando reportes activos de mascotas perdidas...');
 
   // Data States
   const [lostPets, setLostPets] = useState([]);
   const [caretakers, setCaretakers] = useState([]);
   const [unverifiedCaretakers, setUnverifiedCaretakers] = useState([]);
-  const [notifications, setNotifications] = useState([
-    { id: 1, message: "Sistema inicializado en modo demostración.", type: "system", read: false }
-  ]);
   const [searchResults, setSearchResults] = useState(null);
 
-  // Modals & Sighting trigger
+  // Sighting modal target
   const [selectedPetForSighting, setSelectedPetForSighting] = useState(null);
 
-  // Form States - Lost Pet
+  // Form States - Lost Pet (Centered in Lima: -12.046374, -77.042793)
   const [petForm, setPetForm] = useState({
     name: '',
     species: 'Perro',
@@ -131,7 +237,7 @@ export default function App() {
     reviewer_name: ''
   });
 
-  // Check Backend Status & Load Data
+  // Check connection and load data
   useEffect(() => {
     checkBackend();
   }, []);
@@ -145,7 +251,7 @@ export default function App() {
       } else {
         loadMockData();
       }
-    } catch (e) {
+    } catch {
       loadMockData();
     }
   };
@@ -154,65 +260,56 @@ export default function App() {
     setIsBackendOnline(false);
     setLostPets(MOCK_PETS);
     setCaretakers(MOCK_CARETAKERS);
-    addNotification("Backend offline. Ejecutando en modo MOCK local.", "system");
+    setTickerMessage('Modo demostración local: Mostrando mascotas de prueba en el mapa.');
   };
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch Lost Pets
       const petsRes = await fetch(`${API_BASE}/api/lost-pets`);
       const petsData = await petsRes.json();
       setLostPets(petsData);
 
-      // Update ticker message if there are alerts
       if (petsData.length > 0) {
         const latest = petsData[petsData.length - 1];
-        setTickerMessage(`¡Mascota perdida reciente! ${latest.name} (${latest.breed}) reportado en lat: ${latest.lat}, lon: ${latest.lon}`);
+        setTickerMessage(`🚨 ÚLTIMA ALERTA: ${latest.name} (${latest.breed}) reportado como perdido cerca de lat: ${latest.lat}, lon: ${latest.lon}`);
+      } else {
+        setTickerMessage('No hay alertas activas de mascotas perdidas en el área.');
       }
 
-      // Fetch Caretakers
       const careRes = await fetch(`${API_BASE}/api/caretakers`);
       const careData = await careRes.json();
       setCaretakers(careData.filter(c => c.is_verified));
       setUnverifiedCaretakers(careData.filter(c => !c.is_verified));
       
       setIsBackendOnline(true);
-    } catch (e) {
-      console.error(e);
+    } catch {
       loadMockData();
     } finally {
       setLoading(false);
     }
   };
 
-  const addNotification = (message, type = "info") => {
-    setNotifications(prev => [
-      { id: Date.now(), message, type, read: false },
-      ...prev
-    ]);
-  };
-
   const handleSeed = async () => {
     if (!isBackendOnline) {
-      alert("El backend está desconectado. Inicia el servidor FastAPI con MongoDB.");
+      alert("No se pudo establecer conexión con el backend de FastAPI. Asegúrate de encender el backend y configurar tu MONGODB_URI.");
       return;
     }
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/seed`, { method: 'POST' });
       if (res.ok) {
-        addNotification("¡Base de datos MongoDB inicializada con datos semilla!", "success");
+        alert("¡Base de datos MongoDB inicializada con datos semilla exitosamente!");
         await fetchData();
       }
     } catch (e) {
+      console.error(e);
       alert("Error al inicializar la base de datos.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Convert image file to base64
   const handleFileChange = (e, callback) => {
     const file = e.target.files[0];
     if (file) {
@@ -224,13 +321,10 @@ export default function App() {
     }
   };
 
-  // 1. Lost Pet Actions
+  // 1. Register Lost Pet
   const handleCreateLostPet = async (e) => {
     e.preventDefault();
-    const start = Date.now();
-    
     if (!petForm.photo) {
-      // Use fallback default image if not uploaded
       petForm.photo = "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&q=80&w=400";
     }
 
@@ -242,9 +336,8 @@ export default function App() {
         sightings: []
       };
       setLostPets(prev => [...prev, newPet]);
-      setTickerMessage(`[Mock] ¡Mascota perdida! ${newPet.name} (${newPet.breed})`);
-      addNotification(`[Mock - Observer] Notificación enviada a vecinos cercanos.`, "success");
-      alert("Mascota reportada con éxito (Modo Mock).");
+      setTickerMessage(`🚨 ÚLTIMA ALERTA: ${newPet.name} (${newPet.breed}) reportado en lat: ${newPet.lat}, lon: ${newPet.lon}`);
+      alert("Mascota reportada con éxito (Modo simulación local).");
       return;
     }
 
@@ -256,10 +349,8 @@ export default function App() {
         body: JSON.stringify(petForm)
       });
       if (res.ok) {
-        const data = await res.json();
-        const duration = ((Date.now() - start) / 1000).toFixed(2);
-        addNotification(`¡Mascota registrada y notificaciones enviadas a vecinos! Latencia: ${duration}s (RNF 1.1)`, "success");
-        alert(`Mascota registrada con éxito en ${duration} segundos.`);
+        await res.json();
+        alert(`Mascota registrada con éxito. Notificaciones enviadas a vecinos.`);
         setPetForm({
           name: '',
           species: 'Perro',
@@ -273,13 +364,14 @@ export default function App() {
         await fetchData();
       }
     } catch (e) {
+      console.error(e);
       alert("Error al reportar mascota.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Anonymous Sighting Actions
+  // 2. Anonymous Sighting
   const handleCreateSighting = async (e) => {
     e.preventDefault();
     if (!sightingForm.photo) {
@@ -291,7 +383,6 @@ export default function App() {
     };
 
     if (!isBackendOnline) {
-      // Update local state
       setLostPets(prev => prev.map(p => {
         if (p._id === selectedPetForSighting._id) {
           return {
@@ -301,7 +392,6 @@ export default function App() {
         }
         return p;
       }));
-      addNotification(`[Mock] Avistamiento anónimo registrado para ${selectedPetForSighting.name}.`, "info");
       alert("Avistamiento reportado con éxito (Anónimo).");
       setSelectedPetForSighting(null);
       return;
@@ -315,20 +405,20 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        addNotification(`Avistamiento anónimo registrado para la mascota.`, "success");
         alert("Avistamiento reportado con éxito. Gracias por tu ayuda.");
         setSightingForm({ lat: -12.0463, lon: -77.0427, photo: '', description: '' });
         setSelectedPetForSighting(null);
         await fetchData();
       }
     } catch (e) {
+      console.error(e);
       alert("Error al registrar avistamiento.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Image Search Actions
+  // 3. Image Search
   const handleImageSearchSubmit = async (e) => {
     e.preventDefault();
     if (!searchForm.file && !searchForm.previewUrl) {
@@ -337,16 +427,14 @@ export default function App() {
     }
 
     if (!isBackendOnline) {
-      // Simulate Strategy search locally
-      const isDog = true; // Mock assumption
       let mockResults = [];
       if (searchForm.intent === "Adopción") {
         mockResults = [
-          { name: "Rocky (Mock Shelter)", species: "Perro", breed: "Golden Retriever", source_type: "ong_shelter", source_name: "Albergue Patitas Felices", age: "2 años", photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=200", description: "Muy cariñoso, listo para adopción." }
+          { name: "Rocky (Refugio)", species: "Perro", breed: "Golden Retriever", source_type: "ong_shelter", source_name: "Albergue Patitas Felices", age: "2 años", photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=200", description: "Cariñoso, le encanta correr." }
         ];
       } else if (searchForm.intent === "Venta") {
         mockResults = [
-          { name: "Kaiser (Mock Breeder)", species: "Perro", breed: "Golden Retriever", source_type: "certified_breeder", source_name: "Criadero Golden Elite", age: "3 meses", photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=200", description: "Cachorro con pedigree certificado de alta calidad." }
+          { name: "Kaiser (Criadero)", species: "Perro", breed: "Golden Retriever", source_type: "certified_breeder", source_name: "Criadero Golden Elite", age: "3 meses", photo: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=200", description: "Pedigree oficial, vacunas completas." }
         ];
       } else {
         mockResults = lostPets.filter(p => p.breed.toLowerCase().includes("golden") || p.species.toLowerCase().includes("perro"));
@@ -358,11 +446,10 @@ export default function App() {
           detected_species: "Perro",
           detected_breed: "Golden Retriever",
           confidence: 0.98,
-          engine_version: "MockAdapter-v1.0"
+          engine_version: "Adapter-v1.0"
         },
         results: mockResults
       });
-      addNotification(`Búsqueda ejecutada usando estrategia: ${searchForm.intent} (Modo Mock).`, "success");
       return;
     }
 
@@ -371,7 +458,6 @@ export default function App() {
       const formData = new FormData();
       formData.append('intent', searchForm.intent);
       
-      // If we have a file object, send it, otherwise create a blob from base64 previewUrl
       if (searchForm.file) {
         formData.append('file', searchForm.file);
       } else if (searchForm.previewUrl) {
@@ -386,20 +472,20 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSearchResults(data);
-        addNotification(`Búsqueda finalizada utilizando la estrategia "${searchForm.intent}".`, "success");
       }
     } catch (e) {
+      console.error(e);
       alert("Error al realizar la búsqueda.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 4. Caretaker Actions
+  // 4. Caretakers
   const handleRegisterCaretaker = async (e) => {
     e.preventDefault();
     if (!caretakerForm.id_document) {
-      alert("Debe proveer un número de documento oficial (DNI/Passport) para verificación.");
+      alert("Debe ingresar un número de documento para la verificación oficial.");
       return;
     }
 
@@ -423,8 +509,7 @@ export default function App() {
         }
       };
       setUnverifiedCaretakers(prev => [...prev, newCaretaker]);
-      addNotification(`Cuidador ${newCaretaker.name} registrado. Pendiente de verificación de identidad.`, "info");
-      alert("Registro exitoso. Tu perfil se encuentra inactivo hasta que se verifique tu DNI.");
+      alert("Registro de cuidador completado. Tu perfil se activará cuando se verifique tu identidad.");
       setCaretakerForm({
         name: '',
         email: '',
@@ -447,8 +532,7 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        addNotification("Caretaker registrado con éxito. Pendiente de verificar identidad (RNF 3.1)", "info");
-        alert("Registro de cuidador completado. Tu perfil se activará públicamente cuando se valide tu DNI.");
+        alert("Registro completado. Tu perfil se habilitará públicamente tras verificar tu DNI.");
         setCaretakerForm({
           name: '',
           email: '',
@@ -463,6 +547,7 @@ export default function App() {
         await fetchData();
       }
     } catch (e) {
+      console.error(e);
       alert("Error al registrar cuidador.");
     } finally {
       setLoading(false);
@@ -476,7 +561,6 @@ export default function App() {
         caregiver.is_verified = true;
         setUnverifiedCaretakers(prev => prev.filter(c => c._id !== id));
         setCaretakers(prev => [...prev, caregiver]);
-        addNotification(`[Mock] Perfil de ${caregiver.name} verificado e ID oficial validado.`, "success");
       }
       return;
     }
@@ -485,14 +569,11 @@ export default function App() {
       setLoading(true);
       const res = await fetch(`${API_BASE}/api/caretakers/${id}/verify`, { method: 'POST' });
       if (res.ok) {
-        addNotification("Documento de identidad verificado y perfil activado.", "success");
         alert("Perfil verificado con éxito.");
         await fetchData();
-      } else {
-        const err = await res.json();
-        alert(`Error: ${err.detail}`);
       }
     } catch (e) {
+      console.error(e);
       alert("Error al verificar cuidador.");
     } finally {
       setLoading(false);
@@ -507,7 +588,6 @@ export default function App() {
         }
         return c;
       }));
-      addNotification(`[Mock] Receptor de alertas de ${caretaker.name} configurado en ${enabled ? 'ACTIVADO' : 'DESACTIVADO'}.`, "info");
       return;
     }
 
@@ -516,18 +596,17 @@ export default function App() {
         method: 'PUT'
       });
       if (res.ok) {
-        addNotification(`Toggle de alertas cambiado para ${caretaker.name} a ${enabled ? 'ON' : 'OFF'} (RF 3.3)`, "success");
         await fetchData();
       }
     } catch (e) {
-      alert("Error al cambiar toggle de alertas.");
+      console.error(e);
     }
   };
 
   const handleAddReview = async (caretakerId, e) => {
     e.preventDefault();
     if (!reviewForm.reviewer_name || !reviewForm.comment) {
-      alert("Por favor rellena el nombre y comentario de la reseña.");
+      alert("Por favor rellena el nombre y comentario.");
       return;
     }
 
@@ -546,7 +625,6 @@ export default function App() {
         }
         return c;
       }));
-      addNotification("Reseña agregada con éxito (Modo Mock). Calificación promedio recalculada.", "success");
       setReviewForm({ score: 5, comment: '', reviewer_name: '' });
       return;
     }
@@ -559,82 +637,29 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        addNotification("Reseña verificada registrada. Promedio recalculado (RF 3.4)", "success");
-        alert("Reseña registrada con éxito.");
         setReviewForm({ score: 5, comment: '', reviewer_name: '' });
         await fetchData();
       }
     } catch (e) {
+      console.error(e);
       alert("Error al registrar reseña.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper coordinate pickers mapping
-  const handleMapClick = (e, targetForm, setForm) => {
-    const rect = e.target.getBoundingClientRect();
-    const x = e.clientX - rect.left; // x coordinate within element
-    const y = e.clientY - rect.top;  // y coordinate within element
-    
-    // Scale to visual coordinates centered around Lima (-12.0463, -77.0427)
-    // Scale factors: width is 0.02 degrees lon, height is 0.02 degrees lat
-    const pctX = x / rect.width;
-    const pctY = y / rect.height;
-    
-    const lon = -77.0527 + (pctX * 0.02);
-    const lat = -12.0363 - (pctY * 0.02); // lat increases upwards, so we subtract
-    
-    setForm(prev => ({
-      ...prev,
-      lat: parseFloat(lat.toFixed(6)),
-      lon: parseFloat(lon.toFixed(6))
-    }));
-  };
-
   return (
     <div className="app-container">
       {/* Header */}
-      <header className="app-header glass-panel" style={{ padding: '1rem 1.5rem', borderRadius: '12px' }}>
+      <header className="app-header">
         <div className="brand">
-          <div className="brand-logo">🐾</div>
+          <div className="brand-logo">🐕</div>
           <div className="brand-text" style={{ textAlign: 'left' }}>
             <h1>PetMatch & Alert</h1>
-            <p>PC4 - Desarrollo de Software | Patrones de Diseño GoF</p>
+            <p>Red de Búsqueda y Cuidado de Mascotas</p>
           </div>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            Estado: 
-            <span style={{ 
-              display: 'inline-block', 
-              width: '8px', 
-              height: '8px', 
-              borderRadius: '50%', 
-              backgroundColor: isBackendOnline ? '#10b981' : '#ef4444',
-              boxShadow: isBackendOnline ? '0 0 8px #10b981' : '0 0 8px #ef4444'
-            }}></span> 
-            {isBackendOnline ? 'Conectado a MongoDB' : 'Modo Demostración Offline'}
-          </span>
-          <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.5rem 1rem' }} onClick={handleSeed}>
-            ⚡ Inicializar Semilla (MongoDB)
-          </button>
-        </div>
-      </header>
-
-      {/* Live Ticker Alerta */}
-      <div className="live-ticker">
-        <div className="ticker-pulse"></div>
-        <div className="ticker-label">Última Alerta</div>
-        <marquee className="ticker-content" scrollamount="4">{tickerMessage}</marquee>
-      </div>
-
-      {/* Main Layout Tabs */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
         <div className="nav-tabs">
-          <button className={`nav-tab ${tab === 'inicio' ? 'active' : ''}`} onClick={() => setTab('inicio')}>
-            🏠 Resumen del Sistema
-          </button>
           <button className={`nav-tab ${tab === 'perdidos' ? 'active' : ''}`} onClick={() => setTab('perdidos')}>
             🚨 Reportar Pérdida
           </button>
@@ -645,80 +670,31 @@ export default function App() {
             🏡 Red de Cuidadores
           </button>
         </div>
+      </header>
+
+      {/* Ticker de Alertas de Mascotas Perdidas */}
+      <div className="live-ticker">
+        <div className="ticker-pulse"></div>
+        <div className="ticker-label">Última Alerta</div>
+        <marquee className="ticker-content" scrollamount="3">{tickerMessage}</marquee>
       </div>
 
-      {/* Content Panels */}
-      {loading && <div style={{ color: 'var(--accent-primary)', marginBottom: '1rem', fontWeight: 600 }}>Cargando datos del servidor...</div>}
+      {loading && <div style={{ color: 'var(--accent-primary)', marginBottom: '1.25rem', fontWeight: 600 }}>Procesando...</div>}
 
-      {/* TAB 1: INICIO */}
-      {tab === 'inicio' && (
-        <div className="dashboard-grid">
-          <div>
-            <div className="glass-panel panel-section">
-              <h2 className="panel-title">🐾 Sobre este Sistema (PC4)</h2>
-              <p>
-                Esta plataforma implementa un ecosistema completo para mascotas basado en <strong>6 patrones de diseño GoF</strong>, cumpliendo estrictamente con los requerimientos técnicos:
-              </p>
-              
-              <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ borderLeft: '3px solid var(--accent-cyan)', paddingLeft: '1rem' }}>
-                  <h4 style={{ color: 'var(--accent-cyan)' }}>🧬 Patrones Creacionales</h4>
-                  <p style={{ fontSize: '0.9rem', margin: '0.2rem 0' }}>
-                    <strong>Singleton:</strong> Clase <code>MongoDBManager</code> en <code>db.py</code> garantiza una única conexión estable y compartida.
-                  </p>
-                  <p style={{ fontSize: '0.9rem', margin: '0' }}>
-                    <strong>Factory Method:</strong> Clase <code>CaregiverProfileFactory</code> en <code>factory.py</code> crea perfiles (Solidario, Profesional, Especializado) con sus límites de servicio dinámicos.
-                  </p>
-                </div>
-                
-                <div style={{ borderLeft: '3px solid var(--accent-primary)', paddingLeft: '1rem' }}>
-                  <h4 style={{ color: 'var(--accent-primary)' }}>🏗️ Patrones Estructurales</h4>
-                  <p style={{ fontSize: '0.9rem', margin: '0.2rem 0' }}>
-                    <strong>Adapter:</strong> Clase <code>ImageSearchAdapter</code> en <code>adapter.py</code> estandariza los metadatos de imágenes de motores externos en formato JSON intercambiable (RNF 2.1).
-                  </p>
-                  <p style={{ fontSize: '0.9rem', margin: '0' }}>
-                    <strong>Facade:</strong> Clase <code>AlertNotificationFacade</code> en <code>facade.py</code> simplifica el proceso de registro de mascotas, cálculo de distancias (Haversine) y despacho de alertas.
-                  </p>
-                </div>
-
-                <div style={{ borderLeft: '3px solid var(--accent-secondary)', paddingLeft: '1rem' }}>
-                  <h4 style={{ color: 'var(--accent-secondary)' }}>🧠 Patrones de Comportamiento</h4>
-                  <p style={{ fontSize: '0.9rem', margin: '0.2rem 0' }}>
-                    <strong>Observer:</strong> Clase <code>LostPetSubject</code> en <code>observer.py</code> gestiona la notificación inmediata a observadores suscritos (usuarios y cuidadores) en el radio de 1 km en paralelo (RNF 1.1 - latencia &lt; 5s).
-                  </p>
-                  <p style={{ fontSize: '0.9rem', margin: '0' }}>
-                    <strong>Strategy:</strong> Clase <code>SearchContext</code> en <code>strategy.py</code> intercambia los filtros de búsqueda basándose en la intención (Adopción, Venta o Verificar Pérdida) seleccionada (RF 2.2).
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div className="glass-panel panel-section" style={{ minHeight: '350px' }}>
-              <h2 className="panel-title">🔔 Notificaciones Recientes</h2>
-              <div className="notifications-list">
-                {notifications.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No hay alertas o registros nuevos.</p>
-                ) : (
-                  notifications.map(n => (
-                    <div key={n.id} className="notification-item">
-                      <div style={{ fontWeight: 600, color: n.type === 'success' ? '#4ade80' : (n.type === 'system' ? 'var(--accent-cyan)' : 'var(--text-primary)') }}>
-                        {n.type === 'success' ? '⚡ Alerta Enviada' : 'ℹ️ Información'}
-                      </div>
-                      <div>{n.message}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: REPORTAR MASCOTA PERDIDA */}
+      {/* TAB 1: REPORTAR MASCOTA PERDIDA */}
       {tab === 'perdidos' && (
         <div>
+          {/* Active alerts Map */}
+          {lostPets.length > 0 && (
+            <div className="glass-panel panel-section" style={{ marginBottom: '2rem' }}>
+              <h2 className="panel-title">🗺️ Mapa de Búsqueda Activa</h2>
+              <p style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
+                Halla aquí las alertas activas en tu vecindario. Los datos de contacto del dueño están protegidos.
+              </p>
+              <LeafletAlertsMap pets={lostPets} />
+            </div>
+          )}
+
           <div className="glass-panel panel-section" style={{ marginBottom: '2.5rem' }}>
             <h2 className="panel-title">🚨 Registrar Reporte de Mascota Perdida</h2>
             <form onSubmit={handleCreateLostPet} className="form-grid">
@@ -752,7 +728,7 @@ export default function App() {
                     type="text" 
                     className="form-control" 
                     required 
-                    placeholder="Ej. Golden Retriever, Criollo..." 
+                    placeholder="Ej. Golden Retriever..." 
                     value={petForm.breed} 
                     onChange={e => setPetForm({...petForm, breed: e.target.value})}
                   />
@@ -763,7 +739,7 @@ export default function App() {
                     className="form-control" 
                     rows="3" 
                     required
-                    placeholder="Detalles sobre collar, señas particulares o comportamiento..." 
+                    placeholder="Detalles señas particulares, color, collar..." 
                     value={petForm.description} 
                     onChange={e => setPetForm({...petForm, description: e.target.value})}
                   />
@@ -772,7 +748,7 @@ export default function App() {
 
               <div>
                 <div className="form-group">
-                  <label>Imagen de la Mascota (Subir archivo)</label>
+                  <label>Fotografía de la Mascota</label>
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -780,36 +756,26 @@ export default function App() {
                     onChange={e => handleFileChange(e, (base64) => setPetForm({...petForm, photo: base64}))}
                   />
                   {petForm.photo && (
-                    <img src={petForm.photo} alt="Vista previa" style={{ width: '100px', height: '100px', objectFit: 'cover', marginTop: '0.5rem', borderRadius: '8px' }} />
+                    <img src={petForm.photo} alt="Vista previa" style={{ width: '80px', height: '80px', objectFit: 'cover', marginTop: '0.5rem', borderRadius: '6px' }} />
                   )}
                 </div>
                 
                 <div className="form-group">
-                  <label>Ubicación (Haz clic en el mapa simulado para seleccionar coordenadas)</label>
-                  <div className="coord-picker" onClick={e => handleMapClick(e, petForm, setPetForm)}>
-                    <div className="coord-picker-grid"></div>
-                    {/* Visual dot representation */}
-                    <div className="coord-picker-dot" style={{
-                      left: `${((petForm.lon - (-77.0527)) / 0.02) * 100}%`,
-                      top: `${(((-12.0363) - petForm.lat) / 0.02) * 100}%`
-                    }}></div>
-                    <span style={{ position: 'absolute', bottom: '5px', right: '10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Área Lima Metropolitana</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Latitud: </span>
-                      <strong>{petForm.lat}</strong>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Longitud: </span>
-                      <strong>{petForm.lon}</strong>
-                    </div>
+                  <label>Seleccionar Ubicación en el Mapa (Arrastra el marcador)</label>
+                  <LeafletMapSelector 
+                    lat={petForm.lat} 
+                    lon={petForm.lon} 
+                    onChange={(lat, lon) => setPetForm(prev => ({ ...prev, lat, lon }))}
+                  />
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '0.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <div>Lat: <b>{petForm.lat}</b></div>
+                    <div>Lon: <b>{petForm.lon}</b></div>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
                   <button type="submit" className="btn">
-                    🚀 Registrar y Activar Alerta (1 km)
+                    Activar Alerta Geográfica (1 km)
                   </button>
                 </div>
               </div>
@@ -817,33 +783,30 @@ export default function App() {
           </div>
 
           <div>
-            <h2>🚨 Mascotas Perdidas Activas</h2>
-            <p style={{ textAlign: 'left', marginBottom: '1.5rem' }}>
-              <strong>Nota de Seguridad (RNF 1.2):</strong> Para la protección de los dueños, se ha anonimizado su información personal de contacto. Toda la comunicación se realiza a través de avistamientos anónimos.
-            </p>
+            <h2>🚨 Listado de Mascotas Perdidas</h2>
             <div className="grid-container">
               {lostPets.map(p => (
                 <div key={p._id} className="card">
                   <div className="card-media">
                     <img src={p.photo} alt={p.name} />
-                    <span className="card-badge" style={{ backgroundColor: '#ef4444' }}>Mascota Perdida</span>
+                    <span className="card-badge" style={{ borderColor: 'var(--accent-coral)', color: 'var(--accent-coral)' }}>Mascota Perdida</span>
                   </div>
                   <div className="card-body">
                     <h3 className="card-title">{p.name}</h3>
                     <div className="card-subtitle">{p.species} | {p.breed}</div>
                     <p className="card-desc">{p.description}</p>
                     
-                    <div style={{ fontSize: '0.85rem', background: 'rgba(255,255,255,0.03)', padding: '0.5rem', borderRadius: '6px', marginBottom: '1rem' }}>
-                      📍 <strong>Lat:</strong> {p.lat} | <strong>Lon:</strong> {p.lon}
+                    <div style={{ fontSize: '0.8rem', background: 'var(--bg-tertiary)', padding: '0.4rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
+                      📍 Ubicación: <b>{p.lat}</b>, <b>{p.lon}</b>
                     </div>
 
                     {/* Sighting list */}
                     {p.sightings && p.sightings.length > 0 && (
-                      <div style={{ marginBottom: '1rem' }}>
-                        <strong style={{ fontSize: '0.85rem', color: 'var(--accent-cyan)' }}>👁️ Avistamientos ({p.sightings.length}):</strong>
-                        <div style={{ maxHeight: '100px', overflowY: 'auto', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                      <div style={{ marginBottom: '0.75rem', textAlign: 'left' }}>
+                        <strong style={{ fontSize: '0.8rem', color: 'var(--accent-primary)' }}>👁️ Avistamientos ({p.sightings.length}):</strong>
+                        <div style={{ maxHeight: '80px', overflowY: 'auto', fontSize: '0.75rem', marginTop: '0.25rem' }}>
                           {p.sightings.map((s, idx) => (
-                            <div key={s._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
+                            <div key={s._id || idx} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem', marginBottom: '0.2rem' }}>
                               📍 Lat: {s.lat}, Lon: {s.lon} - <em>"{s.description}"</em>
                             </div>
                           ))}
@@ -851,10 +814,10 @@ export default function App() {
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
                       <button 
                         className="btn btn-secondary" 
-                        style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }}
+                        style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem' }}
                         onClick={() => setSelectedPetForSighting(p)}
                       >
                         👁️ Reportar Avistamiento
@@ -872,24 +835,24 @@ export default function App() {
       {selectedPetForSighting && (
         <div className="modal-overlay">
           <div className="modal-content glass-panel">
-            <h2 className="panel-title">👁️ Reportar Avistamiento de {selectedPetForSighting.name}</h2>
-            <p>Tu reporte será guardado de forma anónima para ayudar al dueño a localizar a su mascota.</p>
+            <h2 className="panel-title">👁️ Reportar Avistamiento: {selectedPetForSighting.name}</h2>
+            <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>Sube la foto y marca en el mapa dónde viste a la mascota.</p>
             
             <form onSubmit={handleCreateSighting}>
               <div className="form-group">
-                <label>Descripción / Estado de la mascota</label>
+                <label>Descripción / Observación</label>
                 <textarea 
                   className="form-control" 
-                  rows="3" 
+                  rows="2" 
                   required 
-                  placeholder="Ej: Lo vi corriendo asustado en el parque, se ve cansado..."
+                  placeholder="Ej: Lo vi tomando agua en el parque..."
                   value={sightingForm.description}
                   onChange={e => setSightingForm({...sightingForm, description: e.target.value})}
                 />
               </div>
 
               <div className="form-group">
-                <label>Imagen del Avistamiento (Subir Foto)</label>
+                <label>Foto de Referencia</label>
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -899,55 +862,49 @@ export default function App() {
               </div>
 
               <div className="form-group">
-                <label>Ubicación exacta del Avistamiento (Haz clic en el mapa simulado)</label>
-                <div className="coord-picker" onClick={e => handleMapClick(e, sightingForm, setSightingForm)}>
-                  <div className="coord-picker-grid"></div>
-                  <div className="coord-picker-dot" style={{
-                    left: `${((sightingForm.lon - (-77.0527)) / 0.02) * 100}%`,
-                    top: `${(((-12.0363) - sightingForm.lat) / 0.02) * 100}%`
-                  }}></div>
-                </div>
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.85rem' }}>
-                  <div><strong>Lat:</strong> {sightingForm.lat}</div>
-                  <div><strong>Lon:</strong> {sightingForm.lon}</div>
-                </div>
+                <label>Ubicación del avistamiento (Arrastra el marcador)</label>
+                <LeafletMapSelector 
+                  lat={sightingForm.lat} 
+                  lon={sightingForm.lon} 
+                  onChange={(lat, lon) => setSightingForm(prev => ({ ...prev, lat, lon }))}
+                />
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setSelectedPetForSighting(null)}>Cancelar</button>
-                <button type="submit" className="btn">Enviar Avistamiento Anónimo</button>
+                <button type="submit" className="btn">Enviar Avistamiento</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* TAB 3: BUSCADOR POR IMAGEN MULTIPROPÓSITO */}
+      {/* TAB 2: BUSCADOR POR IMAGEN MULTIPROPÓSITO */}
       {tab === 'buscador' && (
         <div>
           <div className="glass-panel panel-section">
             <h2 className="panel-title">🔍 Buscador Inteligente por Imagen</h2>
-            <p style={{ marginBottom: '1.5rem' }}>
-              Carga la foto de la mascota e indica tu intención. El sistema adaptará el motor de inteligencia artificial (Adapter) y aplicará los filtros correctos (Strategy) en tiempo récord.
+            <p style={{ marginBottom: '1.25rem' }}>
+              Sube la foto de la mascota para iniciar una búsqueda inteligente según tu propósito.
             </p>
 
             <form onSubmit={handleImageSearchSubmit} className="form-grid">
               <div>
                 <div className="form-group">
-                  <label>Selecciona tu Intención (RF 2.2)</label>
+                  <label>Selecciona tu Propósito</label>
                   <select 
                     className="form-control" 
                     value={searchForm.intent} 
                     onChange={e => setSearchForm({...searchForm, intent: e.target.value})}
                   >
-                    <option value="Adopción">Adoptar Mascota (ONGs / Albergues)</option>
-                    <option value="Venta">Comprar Mascota (Criaderos Certificados)</option>
-                    <option value="Verificar Pérdida">Verificar Pérdida (Alertas Activas)</option>
+                    <option value="Adopción">Adoptar (Buscar en ONGs / Albergues)</option>
+                    <option value="Venta">Comprar (Buscar en Criaderos Certificados)</option>
+                    <option value="Verificar Pérdida">Verificar Pérdida (Comparar con Alertas Activas)</option>
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label>Sube una foto de la Mascota</label>
+                  <label>Imagen de Referencia</label>
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -971,21 +928,18 @@ export default function App() {
 
                 <div style={{ marginTop: '1rem' }}>
                   <button type="submit" className="btn">
-                    🔍 Procesar y Buscar
+                    Procesar y Buscar
                   </button>
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'block', textAlign: 'left', marginBottom: '0.5rem' }}>
-                  Vista previa de la Imagen cargada
-                </label>
                 <div className="image-upload-area" style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {searchForm.previewUrl ? (
-                    <img src={searchForm.previewUrl} alt="Vista previa de búsqueda" className="image-upload-preview" style={{ marginTop: 0 }} />
+                    <img src={searchForm.previewUrl} alt="Búsqueda" className="image-upload-preview" style={{ marginTop: 0 }} />
                   ) : (
-                    <div style={{ color: 'var(--text-muted)' }}>
-                      📸 Ninguna imagen seleccionada
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      📸 Arrastra o selecciona una fotografía
                     </div>
                   )}
                 </div>
@@ -995,39 +949,38 @@ export default function App() {
 
           {/* Search Results */}
           {searchResults && (
-            <div style={{ marginTop: '2.5rem' }}>
-              <div className="glass-panel" style={{ padding: '1rem 1.5rem', marginBottom: '1.5rem', textAlign: 'left' }}>
-                <h3 style={{ color: 'var(--accent-cyan)' }}>🧬 Metadatos Estandarizados JSON (RNF 2.1)</h3>
-                <p style={{ fontSize: '0.85rem', margin: '0.25rem 0' }}>El <strong>Adapter</strong> procesó la imagen del motor y extrajo el siguiente formato intercambiable:</p>
-                <pre style={{ background: 'rgba(0,0,0,0.4)', padding: '1rem', borderRadius: '8px', color: '#4ade80', fontSize: '0.85rem', overflowX: 'auto' }}>
-                  {JSON.stringify(searchResults.detected_metadata, null, 2)}
-                </pre>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  <strong>Estrategia Aplicada (Strategy):</strong> Filtrado exclusivo en base a <em>{searchResults.intent}</em>.
+            <div style={{ marginTop: '2rem' }}>
+              <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.25rem', textAlign: 'left', fontSize: '0.85rem' }}>
+                <strong style={{ color: 'var(--accent-primary)' }}>Resultado del Análisis:</strong>
+                <div style={{ marginTop: '0.25rem' }}>
+                  • Especie Detectada: <b>{searchResults.detected_metadata.detected_species}</b><br/>
+                  • Raza Detectada: <b>{searchResults.detected_metadata.detected_breed}</b><br/>
+                  • Precisión: <b>{(searchResults.detected_metadata.confidence * 100).toFixed(0)}%</b>
                 </div>
               </div>
 
-              <h2>📦 Resultados encontrados ({searchResults.results.length})</h2>
+              <h2>📦 Resultados Encontrados ({searchResults.results.length})</h2>
               {searchResults.results.length === 0 ? (
-                <p>No se encontraron coincidencias para la especie y raza de la imagen con la intención seleccionada.</p>
+                <p>No se encontraron resultados para los filtros indicados.</p>
               ) : (
                 <div className="grid-container">
                   {searchResults.results.map((p, idx) => (
                     <div key={p._id || idx} className="card">
                       <div className="card-media">
                         <img src={p.photo} alt={p.name} />
-                        <span className="card-badge" style={{ backgroundColor: p.source_type === 'ong_shelter' ? '#3b82f6' : (p.source_type === 'certified_breeder' ? '#a855f7' : '#ef4444') }}>
-                          {p.source_type === 'ong_shelter' ? 'Adopción' : (p.source_type === 'certified_breeder' ? 'Venta Certificada' : 'Alerta Perdido')}
+                        <span className="card-badge" style={{ 
+                          borderColor: p.source_type === 'ong_shelter' ? '#2563eb' : (p.source_type === 'certified_breeder' ? '#9333ea' : 'var(--accent-coral)'),
+                          color: p.source_type === 'ong_shelter' ? '#2563eb' : (p.source_type === 'certified_breeder' ? '#9333ea' : 'var(--accent-coral)')
+                        }}>
+                          {p.source_type === 'ong_shelter' ? 'Albergue' : (p.source_type === 'certified_breeder' ? 'Criadero' : 'Perdido')}
                         </span>
                       </div>
                       <div className="card-body">
-                        <h3 className="card-title">{p.name || 'Sin Nombre'}</h3>
+                        <h3 className="card-title">{p.name || 'Mascota'}</h3>
                         <div className="card-subtitle">{p.species} | {p.breed}</div>
                         <p className="card-desc">{p.description}</p>
                         <div className="card-meta">
-                          <span>
-                            {p.source_name || (p.status === 'lost' ? 'Alerta de Mascota' : 'Protectora')}
-                          </span>
+                          <span>{p.source_name || (p.status === 'lost' ? 'Alerta Activa' : 'Protectora')}</span>
                           <span>{p.age || ''}</span>
                         </div>
                       </div>
@@ -1040,12 +993,12 @@ export default function App() {
         </div>
       )}
 
-      {/* TAB 4: RED DE CUIDADORES */}
+      {/* TAB 3: CUIDADORES */}
       {tab === 'cuidadores' && (
         <div className="dashboard-grid">
           <div>
-            {/* Caretakers register */}
-            <div className="glass-panel panel-section" style={{ marginBottom: '2rem' }}>
+            {/* Create Caretaker */}
+            <div className="glass-panel panel-section" style={{ marginBottom: '1.5rem' }}>
               <h2 className="panel-title">📝 Registrarse como Cuidador</h2>
               <form onSubmit={handleRegisterCaretaker} className="form-grid">
                 <div>
@@ -1072,7 +1025,7 @@ export default function App() {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Rol de Cuidador (RF 3.1 & Factory)</label>
+                    <label>Rol de Servicio</label>
                     <select 
                       className="form-control"
                       value={caretakerForm.role}
@@ -1084,22 +1037,21 @@ export default function App() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Documento de Identidad Oficial (DNI/CEX) (RNF 3.1)</label>
+                    <label>Documento de Identidad (DNI) (RNF 3.1)</label>
                     <input 
                       type="text" 
                       className="form-control" 
                       required 
-                      placeholder="Ingresa tu documento oficial..."
+                      placeholder="Ingresa tu DNI oficial..."
                       value={caretakerForm.id_document}
                       onChange={e => setCaretakerForm({...caretakerForm, id_document: e.target.value})}
                     />
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>El perfil no se habilitará hasta validar este documento en el panel administrador.</span>
                   </div>
                 </div>
 
                 <div>
                   <div className="form-group">
-                    <label>Especies Aceptadas (Separadas por comas)</label>
+                    <label>Especies Aceptadas</label>
                     <input 
                       type="text" 
                       className="form-control" 
@@ -1109,7 +1061,7 @@ export default function App() {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Tamaños Aceptados (Separados por comas)</label>
+                    <label>Tamaños Aceptados</label>
                     <input 
                       type="text" 
                       className="form-control" 
@@ -1118,8 +1070,8 @@ export default function App() {
                       onChange={e => setCaretakerForm({...caretakerForm, sizes_accepted: e.target.value})}
                     />
                   </div>
-                  <div className="switch-container" style={{ margin: '0.5rem 0' }}>
-                    <span>¿Administra Medicamentos? (RF 3.2)</span>
+                  <div className="switch-container" style={{ margin: '0.4rem 0' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Administra medicamentos</span>
                     <label className="switch">
                       <input 
                         type="checkbox"
@@ -1131,42 +1083,40 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label>Ubicación de servicio (Clic en mapa)</label>
-                    <div className="coord-picker" onClick={e => handleMapClick(e, caretakerForm, setCaretakerForm)}>
-                      <div className="coord-picker-grid"></div>
-                      <div className="coord-picker-dot" style={{
-                        left: `${((caretakerForm.lon - (-77.0527)) / 0.02) * 100}%`,
-                        top: `${(((-12.0363) - caretakerForm.lat) / 0.02) * 100}%`
-                      }}></div>
-                    </div>
+                    <label>Ubicación de servicio (Arrastra el marcador)</label>
+                    <LeafletMapSelector 
+                      lat={caretakerForm.lat} 
+                      lon={caretakerForm.lon} 
+                      onChange={(lat, lon) => setCaretakerForm(prev => ({ ...prev, lat, lon }))}
+                    />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                    <button type="submit" className="btn">Registrarse</button>
+                    <button type="submit" className="btn">Registrarse como Cuidador</button>
                   </div>
                 </div>
               </form>
             </div>
 
-            {/* Public Caretakers List */}
-            <h2>🏡 Red de Cuidadores Verificados</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1.25rem' }}>
+            {/* Verified Caretakers */}
+            <h2>🏡 Directorio de Cuidadores Verificados</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
               {caretakers.length === 0 ? (
-                <p>No hay cuidadores verificados disponibles. Puedes registrarte y verificar tu identidad.</p>
+                <p>No hay cuidadores verificados registrados.</p>
               ) : (
                 caretakers.map(c => (
-                  <div key={c._id} className="glass-panel" style={{ padding: '1.5rem', textAlign: 'left', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  <div key={c._id} className="glass-panel" style={{ padding: '1.25rem', textAlign: 'left', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                        <h3 style={{ margin: 0 }}>{c.name}</h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{c.name}</h3>
                         <span className={`role-badge ${c.role.includes('Solidario') ? 'role-solidario' : (c.role.includes('Profesional') ? 'role-profesional' : 'role-especializado')}`}>
                           {c.role}
                         </span>
                       </div>
                       
-                      <div style={{ marginBottom: '1rem' }}>
-                        <span className="rating-badge">★ {c.average_rating || 'N/A'}</span>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <span className="rating-badge">★ {c.average_rating || '0.0'}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.4rem' }}>
                           ({c.ratings ? c.ratings.length : 0} reseñas)
                         </span>
                       </div>
@@ -1185,23 +1135,21 @@ export default function App() {
                           <span>{c.sizes_accepted.join(', ')}</span>
                         </div>
                         <div className="detail-item">
-                          <span>¿Da Medicinas?:</span>
+                          <span>¿Administra Medicinas?:</span>
                           <span>{c.administers_medication ? 'Sí' : 'No'}</span>
                         </div>
                       </div>
 
-                      {/* Rule Rules (Factory) */}
                       {c.role_rules && (
-                        <div style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '6px', fontSize: '0.8rem' }}>
-                          🔑 <strong>Reglas del Rol (Factory):</strong> Max mascotas: {c.role_rules.max_pets} | Cobro: {c.role_rules.allow_payment ? 'Permitido' : 'Gratuito/Solidario'}
+                        <div style={{ marginTop: '0.75rem', background: 'var(--bg-primary)', padding: '0.4rem', borderRadius: '4px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}>
+                          🔑 <b>Reglas:</b> Límite: {c.role_rules.max_pets} mascotas | Pago: {c.role_rules.allow_payment ? 'Permitido' : 'Gratuito'}
                         </div>
                       )}
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                      {/* Toggle alerts receiver */}
                       <div className="switch-container">
-                        <span style={{ fontSize: '0.85rem' }}>🔔 Recibir alertas geográficas (RF 3.3)</span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>🔔 Alertas Geográficas (Mascotas Perdidas)</span>
                         <label className="switch">
                           <input 
                             type="checkbox"
@@ -1214,20 +1162,20 @@ export default function App() {
 
                       {/* Add Review */}
                       <div className="reviews-container">
-                        <strong style={{ fontSize: '0.85rem' }}>Escribir Reseña (RF 3.4)</strong>
-                        <form onSubmit={(e) => handleAddReview(c._id, e)} style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.8rem' }}>Agregar Calificación</strong>
+                        <form onSubmit={(e) => handleAddReview(c._id, e)} style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
                           <input 
                             type="text" 
                             placeholder="Tu nombre" 
                             className="form-control"
-                            style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem' }}
+                            style={{ flex: 1, padding: '0.35rem', fontSize: '0.75rem' }}
                             required
                             value={reviewForm.reviewer_name}
                             onChange={e => setReviewForm({...reviewForm, reviewer_name: e.target.value})}
                           />
                           <select 
                             className="form-control" 
-                            style={{ width: '60px', padding: '0.4rem', fontSize: '0.8rem' }}
+                            style={{ width: '55px', padding: '0.35rem', fontSize: '0.75rem' }}
                             value={reviewForm.score}
                             onChange={e => setReviewForm({...reviewForm, score: parseInt(e.target.value)})}
                           >
@@ -1241,17 +1189,16 @@ export default function App() {
                             type="text" 
                             placeholder="Comentario" 
                             className="form-control"
-                            style={{ flex: 2, padding: '0.4rem', fontSize: '0.8rem' }}
+                            style={{ flex: 1.5, padding: '0.35rem', fontSize: '0.75rem' }}
                             required
                             value={reviewForm.comment}
                             onChange={e => setReviewForm({...reviewForm, comment: e.target.value})}
                           />
-                          <button type="submit" className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Enviar</button>
+                          <button type="submit" className="btn" style={{ padding: '0.35rem 0.60rem', fontSize: '0.75rem' }}>Añadir</button>
                         </form>
 
-                        {/* Ratings display list */}
                         {c.ratings && c.ratings.length > 0 && (
-                          <div style={{ marginTop: '0.75rem', maxHeight: '100px', overflowY: 'auto' }}>
+                          <div style={{ marginTop: '0.5rem', maxHeight: '80px', overflowY: 'auto' }}>
                             {c.ratings.map((r, idx) => (
                               <div key={idx} className="review-item">
                                 <div className="review-header">
@@ -1271,33 +1218,33 @@ export default function App() {
             </div>
           </div>
 
-          {/* Admin Verification Sidebar */}
+          {/* Validation Sidebar */}
           <div>
             <div className="glass-panel panel-section">
-              <h2 className="panel-title" style={{ color: 'var(--accent-secondary)' }}>🛡️ Panel de Validación (RNF 3.1)</h2>
-              <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
-                Antes de habilitar a un cuidador de manera pública en la plataforma, un administrador debe verificar la validez de su documento de identidad oficial.
+              <h2 className="panel-title" style={{ color: 'var(--accent-primary)' }}>🛡️ Verificación de Cuidadores (RNF 3.1)</h2>
+              <p style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                Antes de activar un perfil de cuidador de manera pública, valida la autenticidad de su DNI.
               </p>
 
               {unverifiedCaretakers.length === 0 ? (
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No hay cuidadores pendientes de validación en este momento.</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No hay perfiles pendientes.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {unverifiedCaretakers.map(c => (
-                    <div key={c._id} style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(232, 121, 249, 0.15)', fontSize: '0.85rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <div key={c._id} style={{ background: 'var(--bg-tertiary)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                         <strong>{c.name}</strong>
-                        <span style={{ color: 'var(--accent-secondary)' }}>{c.role}</span>
+                        <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>{c.role}</span>
                       </div>
                       <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                        📇 <strong>ID Documento:</strong> {c.id_document || 'Ninguno'}
+                        DNI: <b>{c.id_document || 'No especificado'}</b>
                       </div>
                       <button 
                         className="btn" 
-                        style={{ width: '100%', fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                        style={{ width: '100%', fontSize: '0.75rem', padding: '0.4rem' }}
                         onClick={() => handleVerifyCaretaker(c._id)}
                       >
-                        ✓ Validar Documento y Habilitar
+                        ✓ Validar DNI y Habilitar Perfil
                       </button>
                     </div>
                   ))}
@@ -1307,6 +1254,16 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Discreet Footer */}
+      <footer className="discreet-footer">
+        <div>© 2026 PetMatch & Alert. Todos los derechos reservados.</div>
+        <div>
+          <button className="btn-link-seed" onClick={handleSeed}>
+            Cargar Datos de Semilla (MongoDB)
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }
