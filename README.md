@@ -1,124 +1,135 @@
-# 🐾 PetMatch & Alert Platform - PC4
+# Plataforma PetMatch & Alert - PC4
 
-Este es un sistema full-stack desarrollado en **FastAPI (Python)** y **React (Vite)** utilizando **MongoDB** para gestionar el reporte de mascotas perdidas, alertas en tiempo real a vecinos y cuidadores en un radio de 1 km, un buscador inteligente de mascotas por imagen con filtrado por intenciones y una red de cuidadores clasificados por roles con verificación oficial.
+Este proyecto implementa un sistema full-stack desarrollado en FastAPI (Python) y React (Vite) que utiliza SQLite como motor de base de datos relacional integrado. La aplicacion gestiona el reporte de mascotas perdidas, la distribucion de alertas geograficas en un radio de 1 km, la busqueda de mascotas basada en analisis de imagenes clasificada por intenciones y una red de cuidadores temporales organizados bajo restricciones operativas y validacion oficial.
 
-El objetivo principal de este proyecto es demostrar el uso correcto y estructurado de **6 Patrones de Diseño GoF (Gang of Four)**: 2 creacionales, 2 estructurales y 2 de comportamiento.
+El diseno arquitectonico se fundamenta en la aplicacion rigurosa de 6 Patrones de Diseno GoF (Gang of Four), divididos en creacionales, estructurales y de comportamiento, asegurando alta cohesion, bajo acoplamiento e intercambiabilidad.
 
 ---
 
-## 🎨 Patrones de Diseño Implementados
+## Patrones de Diseno Implementados
 
 ### 1. Patrones Creacionales
-*   **Singleton (`MongoDBManager`)**:
-    *   *Ubicación:* `backend/app/config/db.py`
-    *   *Propósito:* Garantizar una única conexión cliente al pool de base de datos MongoDB (Motor / PyMongo) a lo largo de todo el ciclo de vida del backend.
-*   **Factory Method (`CaregiverProfileFactory`)**:
-    *   *Ubicación:* `backend/app/patterns/creational/factory.py`
-    *   *Propósito:* Instanciar la subclase adecuada de perfil de cuidador (`Solidario`, `Profesional`, `Especializado`) según el rol elegido, aplicando dinámicamente sus límites, restricciones y cálculo de calificación.
+
+*   **Singleton (SQLiteManager)**:
+    *   *Ubicacion:* backend/app/config/db.py
+    *   *Proposito:* Administra una unica instancia de conexion a la base de datos local SQLite a lo largo del ciclo de vida del servidor web. Evita la sobrecarga de conexiones concurrentes y asegura que todas las consultas compartan el mismo estado de transacciones de base de datos.
+*   **Factory Method (CaregiverProfileFactory)**:
+    *   *Ubicacion:* backend/app/patterns/creational/factory.py
+    *   *Proposito:* Instancia la clase de perfil de cuidador correspondiente (Cuidador Solidario, Cuidador Profesional o Cuidador Especializado) segun el tipo de servicio seleccionado. Esto permite aplicar limites maximos de capacidad de mascotas, reglas de cobros y administracion de medicamentos de forma dinamica.
 
 ### 2. Patrones Estructurales
-*   **Adapter (`ImageSearchAdapter`)**:
-    *   *Ubicación:* `backend/app/patterns/structural/adapter.py`
-    *   *Propósito:* Adaptar un motor de búsqueda por imágenes externo heredado (incompatible, síncrono y basado en archivos locales) para cumplir con el **RNF 2.1**, devolviendo un formato JSON estándar que hace al buscador intercambiable.
-*   **Facade (`AlertNotificationFacade`)**:
-    *   *Ubicación:* `backend/app/patterns/structural/facade.py`
-    *   *Propósito:* Simplificar el subsistema de alertas en una sola llamada limpia desde el router. Coordina el registro en BD, búsqueda de vecinos en el radio de 1 km (fórmula Haversine), verificación de restricciones de cuidadores y activación del Observer.
+
+*   **Adapter (ImageSearchAdapter)**:
+    *   *Ubicacion:* backend/app/patterns/structural/adapter.py
+    *   *Proposito:* Adapta una interfaz heredada e incompatible de un motor de clasificacion externo (que procesa archivos binarios sincronamente) para que funcione de manera asincrona y exponga una salida estandarizada en formato JSON, satisfaciendo el requerimiento RNF 2.1.
+*   **Facade (AlertNotificationFacade)**:
+    *   *Ubicacion:* backend/app/patterns/structural/facade.py
+    *   *Proposito:* Provee una interfaz unificada y simplificada para el proceso complejo de registrar una alerta de mascota perdida. Esta fachada coordina la persistencia del reporte, el calculo de distancias mediante la formula Haversine, la busqueda de vecinos y cuidadores observadores en el radio de 1 km, y la activacion del sistema de notificaciones.
 
 ### 3. Patrones de Comportamiento
-*   **Observer (`AlertObserverSystem`)**:
-    *   *Ubicación:* `backend/app/patterns/behavioral/observer.py`
-    *   *Propósito:* Notificar a usuarios y cuidadores registrados como observadores en un radio de 1 km cuando se publica una mascota perdida (sujeto). Corre de forma asíncrona y en paralelo (`asyncio.gather`) para garantizar latencias menores a 5 segundos (**RNF 1.1**).
-*   **Strategy (`SearchIntentStrategy`)**:
-    *   *Ubicación:* `backend/app/patterns/behavioral/strategy.py`
-    *   *Propósito:* Encapsular las estrategias de filtrado para el buscador inteligente según la intención del usuario: `AdopcionStrategy` (catálogo de ONGs), `VentaStrategy` (criadores certificados) o `VerificarPerdidaStrategy` (alertas de perdidos).
+
+*   **Observer (AlertObserverSystem)**:
+    *   *Ubicacion:* backend/app/patterns/behavioral/observer.py
+    *   *Proposito:* Implementa la suscripcion y notificacion automatica de eventos a los vecinos y cuidadores registrados en el area geografica de la mascota perdida. Funciona en hilos asincronos concurrentes (utilizando asyncio.gather) logrando despachar notificaciones en un tiempo inferior a los 5 segundos (RNF 1.1).
+*   **Strategy (SearchIntentStrategy)**:
+    *   *Ubicacion:* backend/app/patterns/behavioral/strategy.py
+    *   *Proposito:* Permite intercambiar dinamicamente el algoritmo de busqueda de mascotas segun la intencion seleccionada por el usuario en el formulario (Adopcion: busca en bases de datos de albergues y ONGs; Venta: busca en criaderos certificados; Verificar Perdida: busca coincidencias en el registro de alertas activas).
 
 ---
 
-## 📂 Estructura del Código
+## Estructura del Codigo
 
-```text
 PC4_DesarrolloDeSoftware/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                # Entrada FastAPI y endpoints semilla
+│   │   ├── main.py                # Inicializacion de FastAPI y carga automatica de semilla
 │   │   ├── config/
-│   │   │   └── db.py              # Singleton MongoDB
+│   │   │   └── db.py              # Singleton de base de datos SQLite
 │   │   ├── models/
-│   │   │   └── schemas.py         # Validación Pydantic
-│   │   ├── routers/               # Rutas API
+│   │   │   └── schemas.py         # Modelos de validacion de datos (Pydantic)
+│   │   ├── routers/               # Controladores y rutas de la API
 │   │   └── patterns/
 │   │       ├── creational/        # Factory Method
-│   │       ├── structural/        # Adapter, Facade
-│   │       └── behavioral/        # Observer, Strategy
+│   │       ├── structural/        # Adapter y Facade
+│   │       └── behavioral/        # Observer y Strategy
 │   ├── requirements.txt
 │   └── run.py
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                # Interfaz de usuario interactiva y cliente API
-│   │   ├── index.css              # Estilos CSS variables, modo oscuro y animaciones
+│   │   ├── App.jsx                # Interfaz de usuario interactiva en React
+│   │   ├── index.css              # Hojas de estilo y configuraciones de diseno
 │   │   └── main.jsx
 │   ├── package.json
 │   └── vite.config.js
 └── README.md
-```
 
 ---
 
-## 🚀 Cómo ejecutar el proyecto locally
+## Requisitos de Entorno
 
-### prerrequisitos
-1.  Tener instalado **Python 3.10+** y **Node.js 18+**.
-2.  Tener **MongoDB** ejecutándose localmente en `mongodb://localhost:27017` (si deseas usar el backend real, de lo contrario la aplicación iniciará automáticamente en **modo demostración local con datos mock**).
+*   Python 3.10 o superior
+*   Node.js 18 o superior
+*   SQLite3 integrado en el entorno de ejecucion de Python (no requiere instalaciones de servidores externos)
 
-### Paso 1: Configurar y Ejecutar el Backend (FastAPI)
-1.  Abre una terminal en la carpeta `backend/`:
+---
+
+## Instrucciones de Ejecucion
+
+### Paso 1: Configurar y Levantar el Servidor Backend
+
+1.  Navegar a la carpeta del backend:
     ```bash
     cd backend
     ```
-2.  Crea un entorno virtual e instala dependencias:
+2.  Crear e iniciar un entorno virtual de Python:
     ```bash
     python -m venv venv
     # En Windows:
     .\venv\Scripts\activate
+    ```
+3.  Instalar las dependencias requeridas:
+    ```bash
     pip install -r requirements.txt
     ```
-3.  Inicia el servidor backend:
+4.  Ejecutar el servidor de desarrollo:
     ```bash
     python run.py
     ```
-    El API estará disponible en `http://localhost:8000`. Puedes ingresar a la documentación en `http://localhost:8000/docs`.
+    La API estara disponible en http://localhost:8000. Los datos de prueba semilla se cargaran automaticamente en la primera ejecucion si la base de datos se encuentra vacia.
 
-### Paso 2: Configurar y Ejecutar el Frontend (React)
-1.  Abre otra terminal en la carpeta `frontend/`:
+### Paso 2: Configurar y Levantar el Frontend
+
+1.  Abrir una nueva terminal e ingresar a la carpeta del frontend:
     ```bash
     cd frontend
     ```
-2.  Instala las dependencias:
+2.  Instalar las dependencias de Node:
     ```bash
     npm install
     ```
-3.  Inicia el servidor de desarrollo:
+3.  Iniciar el servidor de Vite:
     ```bash
     npm run dev
     ```
-    La aplicación web se abrirá en `http://localhost:5173`.
+    La aplicacion estara accesible a traves de http://localhost:5173.
 
 ---
 
-## 🧪 Pasos sugeridos para calificar / probar el sistema
+## Guia de Pruebas y Calificacion
 
-1.  **Modo Simulación**: Al abrir el frontend, si el backend está apagado, se activará el **Modo Demostración Offline** con datos de prueba locales para interactuar de inmediato.
-2.  **Inicialización de Semilla**: Si conectaste MongoDB y encendiste el backend, haz clic en **⚡ Inicializar Semilla (MongoDB)** en la cabecera del frontend. Esto poblará la BD con usuarios simulados en Lima, criaderos certificados, albergues y cuidadores de prueba.
-3.  **Registro de Alerta (1 km)**: 
-    *   Dirígete a la pestaña **Reportar Pérdida**.
-    *   Ingresa el nombre, especie, raza y descripción.
-    *   Haz clic en el mapa cuadriculado interactivo para marcar una coordenada cercana (ej: latitud `-12.046`, longitud `-77.042`).
-    *   Registra la mascota. El sistema ejecutará el **Facade** y el **Observer**, enviando notificaciones asíncronas inmediatas y mostrando la latencia del proceso en la campana de notificaciones.
-4.  **Buscador Inteligente**:
-    *   Ve a **Buscador Inteligente**.
-    *   Elige la intención (ej: *Adopción* o *Venta*).
-    *   Sube cualquier imagen. El **Adapter** extraerá los metadatos y la **Estrategia** filtrará exclusivamente albergues o criaderos.
-5.  **Verificación de Identidad (Cuidadores)**:
-    *   Ve a **Red de Cuidadores**.
-    *   Registra un nuevo cuidador. Ingresa un número de DNI oficial.
-    *   El perfil no aparecerá en la red pública hasta que lo verifiques en el panel de administración derecho **🛡️ Panel de Validación (RNF 3.1)**. Haz clic en validar para activarlo.
+1.  **Carga Automatizada de Datos (Semilla):** Al levantar la API de FastAPI por primera vez, el sistema detecta de forma automatica que no existen registros en el archivo SQLite local y puebla las tablas con usuarios vecinos, cuidadores y alertas iniciales. No se requiere interaccion manual para inicializar el sistema.
+2.  **Registro de Alertas Geograficas:**
+    *   Ingresar a la aplicacion y autenticarse con el rol de Dueno.
+    *   Acceder al formulario de reporte e ingresar la informacion de la mascota.
+    *   Seleccionar una ubicacion en el mapa interactivo (por ejemplo, arrastrando el marcador a una coordenada cercana) y registrar el reporte.
+    *   El sistema asincrono calculara la distancia y despachara las alertas a los vecinos en un radio de 1 km.
+3.  **Avistamientos Anonimos:**
+    *   En las tarjetas de alertas activas, cualquier usuario invitado puede hacer clic en Reportar Avistamiento Anonimo.
+    *   Esto permite subir una foto de referencia y marcar la ubicacion exacta en el mapa, manteniendo ocultos los datos del dueno.
+4.  **Buscador Inteligente:**
+    *   Ingresar a la seccion de busqueda por imagen y subir un archivo.
+    *   Seleccionar la intencion (Adopcion, Venta o Verificar Perdida).
+    *   El sistema adaptara la imagen mediante el Adapter y aplicara la estrategia correspondiente para filtrar los resultados de albergues, criaderos o alertas activas respectivamente.
+5.  **Verificacion de Cuidadores:**
+    *   Ingresar como cuidador y registrarse en el sistema con un numero de DNI.
+    *   El cuidador permanecera inactivo hasta que se acceda al Panel de Validacion en la barra lateral del modulo de cuidadores y se pulse el boton para validar el DNI (RNF 3.1), haciendolo publico e interactivo.
