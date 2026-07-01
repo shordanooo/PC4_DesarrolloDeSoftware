@@ -11,7 +11,7 @@ L.Icon.Default.mergeOptions({
 
 const API_BASE = 'http://localhost:8000';
 
-// Fallback data when MySQL is offline
+// Fallback data when MySQL/SQLite is offline
 const MOCK_PETS = [
   {
     id: 1,
@@ -148,7 +148,7 @@ function LeafletAlertsMap({ pets }) {
       const marker = L.marker([p.lat, p.lon])
         .addTo(map)
         .bindPopup(`
-          <div style="font-family: sans-serif; font-size: 0.85rem; text-align: left;">
+          <div style="font-family: sans-serif; font-size: 0.85rem; text-align: left; color: #1c2d38;">
             <strong style="font-size: 1rem; color: #00684a;">${p.name}</strong><br/>
             <b>Raza:</b> ${p.breed}<br/>
             <b>Descripción:</b> ${p.description}
@@ -169,19 +169,137 @@ function LeafletAlertsMap({ pets }) {
   return <div ref={mapRef} className="map-container" style={{ height: '300px', marginBottom: '1.5rem' }} />;
 }
 
-// Custom leaf & paw combination icon SVG
+// Custom logo leaf/paw SVG
 function CustomLogoIcon({ size = 32 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Leaf backdrop in MongoDB Green */}
       <path d="M16 2C16 2 25 8 25 16C25 24 16 30 16 30C16 30 7 24 7 16C7 8 16 2 16 2Z" fill="#00ed64" opacity="0.85"/>
-      {/* Dog paw print inside leaf */}
       <circle cx="16" cy="18" r="4.5" fill="#00684a" />
       <circle cx="10.5" cy="13.5" r="2" fill="#00684a" />
       <circle cx="14" cy="10.5" r="2" fill="#00684a" />
       <circle cx="18" cy="10.5" r="2" fill="#00684a" />
       <circle cx="21.5" cy="13.5" r="2" fill="#00684a" />
     </svg>
+  );
+}
+
+// Cartoon Doodle Dog (Sketch style like the PNGTree reference, with animations)
+function HappyDogIcon() {
+  return (
+    <div className="animated-svg-container" title="Pasa el mouse para interactuar">
+      <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="65" r="38" fill="#00ed64" opacity="0.1"/>
+        
+        {/* Tail (Wagging) */}
+        <path className="dog-tail" d="M30 85 C15 80 20 65 35 70" stroke="#00ed64" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round"/>
+        
+        {/* Sketchy Body */}
+        <path d="M42 62 C42 62 40 85 45 92 C50 99 75 99 80 92 C85 85 82 62 82 62" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="#0c2635"/>
+        
+        {/* Left Ear (Twitch) */}
+        <path className="dog-ear-left" d="M32 38 C22 25 45 20 48 34" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="#00ed64"/>
+        
+        {/* Right Ear (Twitch) */}
+        <path className="dog-ear-right" d="M88 38 C98 25 75 20 72 34" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="#00ed64"/>
+        
+        {/* Dog Head (Doodle shape) */}
+        <path d="M45 42 C38 48 38 68 46 72 C54 76 68 76 76 72 C84 68 84 48 77 42 C70 38 52 38 45 42 Z" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="#0c2635"/>
+        
+        {/* Eye Patch (Doodle style) */}
+        <path d="M38 48 C35 52 42 60 46 54 C50 48 44 44 38 48 Z" fill="#00684a" opacity="0.8"/>
+        
+        {/* Eyes (Blinking) */}
+        <g className="eye-blink">
+          <circle cx="45" cy="51" r="3" fill="#ffffff"/>
+          <circle cx="70" cy="51" r="3" fill="#ffffff"/>
+        </g>
+        
+        {/* Snout & Cute tongue sticking out */}
+        <path d="M52 59 C54 62 64 62 66 59" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round"/>
+        <path d="M57 61 C57 66 61 66 61 61 Z" fill="#ff3333" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round"/>
+        <ellipse cx="59" cy="57" rx="6" ry="4.5" fill="#00ed64" stroke="#ffffff" strokeWidth="3"/>
+        <circle cx="59" cy="55" r="2" fill="#001e2b"/>
+      </svg>
+    </div>
+  );
+}
+
+// Cartoon Doodle Detective Cat (Sketch style)
+function DetectiveCatIcon() {
+  return (
+    <div className="animated-svg-container" title="Pasa el mouse para interactuar">
+      <svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="50" r="34" fill="#00a2ff" opacity="0.1"/>
+        
+        {/* Sketchy pointy ears */}
+        <path className="cat-ear-left" d="M22 25 L40 40 L18 45 Z" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="#00684a"/>
+        <path className="cat-ear-right" d="M78 25 L60 40 L82 45 Z" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="#00684a"/>
+        
+        {/* Cat Head */}
+        <circle cx="50" cy="48" r="22" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="#0c2635"/>
+        
+        {/* Eyes (Blinking) */}
+        <g className="eye-blink">
+          <circle cx="40" cy="45" r="4.5" fill="white"/>
+          <circle cx="40" cy="45" r="2" fill="#001e2b"/>
+          <circle cx="60" cy="45" r="4.5" fill="white"/>
+          <circle cx="60" cy="45" r="2" fill="#001e2b"/>
+        </g>
+        
+        {/* Detective Glass (floating) */}
+        <g className="detective-monocle">
+          <circle cx="60" cy="45" r="8.5" stroke="#00ed64" strokeWidth="3"/>
+          <line x1="68" y1="45" x2="82" y2="52" stroke="#00ed64" strokeWidth="3" strokeLinecap="round"/>
+        </g>
+        
+        {/* Cute nose & whiskers */}
+        <polygon points="48,51 52,51 50,54" fill="#ff8000" stroke="#ffffff" strokeWidth="1.5"/>
+        <path d="M42 53 C46 56 46 56 50 53 C54 56 54 56 58 53" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round"/>
+        
+        {/* Whiskers */}
+        <line x1="26" y1="52" x2="14" y2="50" stroke="#889da3" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="28" y1="58" x2="16" y2="59" stroke="#889da3" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="74" y1="52" x2="86" y2="50" stroke="#889da3" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="72" y1="58" x2="84" y2="59" stroke="#889da3" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
+    </div>
+  );
+}
+
+// Cartoon Doodle Dog & Cat cooperating (Sketch style)
+function CooperatingPetsIcon() {
+  return (
+    <div className="animated-svg-container" title="Pasa el mouse para interactuar">
+      <svg width="130" height="130" viewBox="0 0 120 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="50" r="36" fill="#ff8000" opacity="0.08"/>
+        
+        {/* Doodle Dog (Left side) */}
+        {/* Dog Body */}
+        <path d="M22 65 C22 55 42 55 42 65 L42 90 L22 90 Z" stroke="#ffffff" strokeWidth="3.5" fill="#00684a"/>
+        <path className="dog-tail" d="M18 80 C12 77 14 67 22 72" stroke="#00ed64" strokeWidth="3.5" strokeLinecap="round"/>
+        {/* Dog Head */}
+        <circle cx="32" cy="48" r="14" stroke="#ffffff" strokeWidth="3.5" fill="#0c2635"/>
+        <path className="dog-ear-left" d="M22 45 C20 38 28 35 30 40Z" fill="#00ed64" stroke="#ffffff" strokeWidth="2"/>
+        <g className="eye-blink">
+          <circle cx="28" cy="46" r="2" fill="white"/>
+          <circle cx="36" cy="46" r="2" fill="white"/>
+        </g>
+        <ellipse cx="32" cy="51" rx="4.5" ry="3.5" fill="#00ed64" stroke="#ffffff" strokeWidth="1.5"/>
+        
+        {/* Doodle Cat (Right side) */}
+        {/* Cat Body */}
+        <path d="M78 70 C78 60 94 60 94 70 L94 90 L78 90 Z" stroke="#ffffff" strokeWidth="3.5" fill="#0c2635"/>
+        {/* Cat Head */}
+        <circle cx="86" cy="52" r="12" stroke="#ffffff" strokeWidth="3.5" fill="#00ed64"/>
+        <polygon className="cat-ear-left" points="78,44 84,50 76,52" fill="#00684a" stroke="#ffffff" strokeWidth="1.5"/>
+        <polygon className="cat-ear-right" points="94,44 88,50 96,52" fill="#00684a" stroke="#ffffff" strokeWidth="1.5"/>
+        <g className="eye-blink">
+          <circle cx="82" cy="52" r="2" fill="white"/>
+          <circle cx="90" cy="52" r="2" fill="white"/>
+        </g>
+        <polygon points="85,55 87,55 86,57" fill="#ff3333"/>
+      </svg>
+    </div>
   );
 }
 
@@ -279,7 +397,7 @@ export default function App() {
     setIsBackendOnline(false);
     setLostPets(MOCK_PETS);
     setCaretakers(MOCK_CARETAKERS);
-    setTickerMessage('Modo simulación: Conecta tu base de datos de MySQL en backend/.env.');
+    setTickerMessage('Modo simulación: Conecta tu base de datos de SQLite en backend/.env.');
   };
 
   const fetchData = async () => {
@@ -318,7 +436,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/api/seed`, { method: 'POST' });
       if (res.ok) {
-        alert("¡Base de datos MySQL inicializada con datos semilla con éxito!");
+        alert("¡Base de datos MySQL/SQLite inicializada con datos semilla con éxito!");
         await fetchData();
       }
     } catch (e) {
@@ -745,16 +863,20 @@ export default function App() {
             <div className="landing-title">
               Encuentra y Protege a tus <span>Mascotas</span>
             </div>
-            <p style={{ color: '#88939e', fontSize: '0.95rem' }}>
+            <p style={{ color: '#88939e', fontSize: '1.05rem', fontWeight: 300 }}>
               Únete a la mayor red vecinal inteligente de localización y cuidado temporal de animales de compañía.
             </p>
-            <div className="connection-pill">
-              <span>●</span> Red Vecinal Activa
+            
+            <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', marginTop: '1rem' }}>
+              <div className="connection-pill">
+                <span>●</span> Red Vecinal Activa
+              </div>
+              <HappyDogIcon />
             </div>
           </div>
 
           <div className="glass-panel" style={{ color: 'var(--text-primary)', border: 'none', background: 'white' }}>
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.25rem', fontWeight: 700, color: 'var(--mongo-forest)' }}>Acceder a la Red</h2>
+            <h2 style={{ fontSize: '1.4rem', marginBottom: '1.5rem', fontWeight: 800, color: 'var(--mongo-forest)' }}>Acceder a la Red</h2>
             <form onSubmit={handleLogin}>
               <div className="form-group">
                 <label>Rol de Acceso</label>
@@ -817,7 +939,7 @@ export default function App() {
           <div>© 2026 PetMatch & Alert. Todos los derechos reservados.</div>
           <div>
             <button className="btn-link-seed" onClick={handleSeed}>
-              Cargar Base de Datos Semilla (MySQL)
+              Cargar Base de Datos Semilla (MySQL/SQLite)
             </button>
           </div>
         </footer>
@@ -833,8 +955,8 @@ export default function App() {
         <div className="brand">
           <CustomLogoIcon size={32} />
           <div className="brand-text" style={{ textAlign: 'left' }}>
-            <h1 style={{ color: 'white', fontSize: '1.25rem' }}>PetMatch & Alert</h1>
-            <p style={{ color: 'var(--mongo-green)', fontSize: '0.75rem', fontWeight: 600 }}>Red de Búsqueda y Cuidado de Mascotas</p>
+            <h1 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 800 }}>PetMatch & Alert</h1>
+            <p style={{ color: 'var(--mongo-green)', fontSize: '0.8rem', fontWeight: 500 }}>Red de Cuidadores y Localización</p>
           </div>
         </div>
         
@@ -863,7 +985,7 @@ export default function App() {
                   Rol: {currentUser ? currentUser.role : 'visitante'}
                 </div>
               </div>
-              <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', color: 'white', border: '1px solid #1a2f3b', background: '#0e2430' }} onClick={handleLogout}>
+              <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', color: 'white', border: '1px solid #1a3c4a', background: '#0e2a39' }} onClick={handleLogout}>
                 Salir
               </button>
             </div>
@@ -878,11 +1000,11 @@ export default function App() {
         <marquee className="ticker-content" scrollamount="3">{tickerMessage}</marquee>
       </div>
 
-      {loading && <div style={{ color: 'var(--mongo-forest)', marginBottom: '1.25rem', fontWeight: 600 }}>Cargando operación...</div>}
+      {loading && <div style={{ color: 'var(--mongo-green)', marginBottom: '1.25rem', fontWeight: 600 }}>Cargando operación...</div>}
 
       {/* User Dashboard Notification Summary */}
       {currentUser && (
-        <div className="glass-panel" style={{ padding: '1rem 1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eefdf5', border: '1px solid var(--mongo-forest)' }}>
+        <div className="glass-panel" style={{ padding: '1rem 1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0, 104, 74, 0.08)', border: '1px solid var(--mongo-green)' }}>
           <div style={{ textAlign: 'left' }}>
             <span>👤 Sesión activa como <strong>{currentUser.role}</strong>. </span>
             {currentUser.role === 'Dueño' ? (
@@ -900,7 +1022,7 @@ export default function App() {
           {loggedCaretaker && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
               <div className="switch-container" style={{ background: 'white' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, marginRight: '0.5rem' }}>🔔 Recibir Alertas 1km (RF 3.3)</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--mongo-dark-bg)', fontWeight: 700, marginRight: '0.5rem' }}>🔔 Recibir Alertas 1km (RF 3.3)</span>
                 <label className="switch">
                   <input 
                     type="checkbox"
@@ -920,17 +1042,23 @@ export default function App() {
         <div>
           {/* Active alerts Map */}
           {lostPets.length > 0 && (
-            <div className="glass-panel panel-section" style={{ marginBottom: '2rem' }}>
+            <div className="glass-panel panel-section watermarked-panel" style={{ marginBottom: '2rem' }}>
               <h2 className="panel-title">🗺️ Mapa de Búsqueda Activa</h2>
-              <p style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
+              <p style={{ marginBottom: '1rem', fontSize: '0.95rem', color: 'var(--text-light)' }}>
                 Mapa geográfico de alertas de extravío activas. Las alertas se emiten automáticamente a vecinos en un radio de 1 km.
               </p>
               <LeafletAlertsMap pets={lostPets} />
             </div>
           )}
 
-          <div className="glass-panel panel-section" style={{ marginBottom: '2.5rem' }}>
-            <h2 className="panel-title">🚨 Reportar Mascota Perdida</h2>
+          <div className="glass-panel panel-section watermarked-panel" style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2>🚨 Reportar Mascota Perdida</h2>
+                <p className="subtitle">Inserta un nuevo registro con foto y coordenadas GPS</p>
+              </div>
+              <HappyDogIcon />
+            </div>
             {!currentUser ? (
               <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
                 <p style={{ marginBottom: '1rem', fontWeight: 600 }}>Debe iniciar sesión como <strong>Dueño</strong> para registrar un reporte.</p>
@@ -1039,21 +1167,21 @@ export default function App() {
                       <span className="card-badge" style={{ borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}>Perdido</span>
                     </div>
                     <div className="card-body">
-                      <h3 className="card-title">{p.name}</h3>
-                      <div className="card-subtitle">{p.species} | {p.breed}</div>
-                      <p className="card-desc">{p.description}</p>
+                      <h3 className="card-title" style={{ color: 'var(--text-white)' }}>{p.name}</h3>
+                      <div className="card-subtitle" style={{ color: 'var(--accent-blue)' }}>{p.species} | {p.breed}</div>
+                      <p className="card-desc" style={{ color: 'var(--text-light)' }}>{p.description}</p>
                       
-                      <div style={{ fontSize: '0.8rem', background: 'var(--bg-primary)', padding: '0.4rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-light)', background: 'var(--mongo-dark-bg)', padding: '0.4rem', borderRadius: '4px', marginBottom: '0.75rem', border: '1px solid var(--mongo-border)' }}>
                         📍 Coordenadas: [ {p.lat}, {p.lon} ]
                       </div>
 
                       {/* Sighting list */}
                       {p.sightings && p.sightings.length > 0 && (
                         <div style={{ marginBottom: '0.75rem', textAlign: 'left' }}>
-                          <strong style={{ fontSize: '0.8rem', color: 'var(--mongo-forest)' }}>👁️ Avistamientos reportados ({p.sightings.length}):</strong>
+                          <strong style={{ fontSize: '0.8rem', color: 'var(--mongo-green)' }}>👁️ Avistamientos reportados ({p.sightings.length}):</strong>
                           <div style={{ maxHeight: '80px', overflowY: 'auto', fontSize: '0.75rem', marginTop: '0.25rem' }}>
                             {p.sightings.map((s, idx) => (
-                              <div key={s.id || s._id || idx} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem', marginBottom: '0.2rem', fontSize: '0.75rem' }}>
+                              <div key={s.id || s._id || idx} style={{ borderBottom: '1px solid var(--mongo-border)', paddingBottom: '0.2rem', marginBottom: '0.2rem', fontSize: '0.75rem', color: 'var(--text-light)' }}>
                                 📍 coords: [{s.lat}, {s.lon}] - <em>"{s.description}"</em>
                               </div>
                             ))}
@@ -1083,8 +1211,8 @@ export default function App() {
       {selectedPetForSighting && (
         <div className="modal-overlay">
           <div className="modal-content glass-panel">
-            <h2 className="panel-title">👁️ Reportar Avistamiento: {selectedPetForSighting.name}</h2>
-            <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>Sube la foto y marca en el mapa dónde viste a la mascota de forma anónima.</p>
+            <h2 className="panel-title" style={{ color: 'var(--mongo-green)' }}>👁️ Reportar Avistamiento: {selectedPetForSighting.name}</h2>
+            <p style={{ fontSize: '0.85rem', marginBottom: '1rem', color: 'var(--text-light)' }}>Sube la foto y marca en el mapa dónde viste a la mascota de forma anónima.</p>
             
             <form onSubmit={handleCreateSighting}>
               <div className="form-group">
@@ -1130,13 +1258,16 @@ export default function App() {
       {/* TAB 2: Buscador por Imagen */}
       {tab === 'buscador' && (
         <div>
-          <div className="glass-panel panel-section">
-            <h2 className="panel-title">🔍 Buscador Inteligente por Imagen</h2>
-            <p style={{ marginBottom: '1.25rem' }}>
-              Sube la foto de una mascota para realizar búsquedas específicas usando los filtros de la base de datos según tu propósito.
-            </p>
+          <div className="glass-panel panel-section watermarked-panel">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2>🔍 Buscador por Imagen</h2>
+                <p className="subtitle">Carga una foto para buscar y clasificar coincidencias de especies y razas</p>
+              </div>
+              <DetectiveCatIcon />
+            </div>
 
-            <form onSubmit={handleImageSearchSubmit} className="form-grid">
+            <form onSubmit={handleImageSearchSubmit} className="form-grid" style={{ marginTop: '1.5rem' }}>
               <div>
                 <div className="form-group">
                   <label>Propósito de Búsqueda</label>
@@ -1186,8 +1317,11 @@ export default function App() {
                   {searchForm.previewUrl ? (
                     <img src={searchForm.previewUrl} alt="Búsqueda" className="image-upload-preview" style={{ marginTop: 0 }} />
                   ) : (
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      📸 Selecciona una fotografía
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <DetectiveCatIcon />
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        📸 Selecciona una fotografía
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1199,7 +1333,7 @@ export default function App() {
           {searchResults && (
             <div style={{ marginTop: '2rem' }}>
               <div className="glass-panel" style={{ padding: '0', marginBottom: '1.25rem', textAlign: 'left', border: 'none' }}>
-                <h3 style={{ fontSize: '1rem', color: 'var(--mongo-forest)', padding: '0.5rem 0' }}>
+                <h3 style={{ fontSize: '1rem', color: 'var(--mongo-green)', padding: '0.5rem 0' }}>
                   📊 Metadatos Detectados por la Imagen (Adapter RNF 2.1)
                 </h3>
                 <pre className="metadata-json">
@@ -1212,28 +1346,31 @@ export default function App() {
                 <p>No se encontraron registros que coincidan con la especie o raza de la imagen.</p>
               ) : (
                 <div className="grid-container">
-                  {searchResults.results.map((p, idx) => (
-                    <div key={p.id || p._id || idx} className="card">
-                      <div className="card-media">
-                        <img src={p.photo} alt={p.name} />
-                        <span className="card-badge" style={{ 
-                          borderColor: p.source_type === 'ong_shelter' ? 'var(--accent-blue)' : (p.source_type === 'certified_breeder' ? 'var(--mongo-forest)' : 'var(--accent-red)'),
-                          color: p.source_type === 'ong_shelter' ? 'var(--accent-blue)' : (p.source_type === 'certified_breeder' ? 'var(--mongo-forest)' : 'var(--accent-red)')
-                        }}>
-                          {p.source_type === 'ong_shelter' ? 'Albergue' : (p.source_type === 'certified_breeder' ? 'Criadero' : 'Perdido')}
-                        </span>
-                      </div>
-                      <div className="card-body">
-                        <h3 className="card-title">{p.name || 'Mascota'}</h3>
-                        <div className="card-subtitle">{p.species} | {p.breed}</div>
-                        <p className="card-desc">{p.description}</p>
-                        <div className="card-meta">
-                          <span>{p.source_name || (p.status === 'lost' ? 'Alerta Perdido' : 'Protectora')}</span>
-                          <span>{p.age || ''}</span>
+                  {searchResults.results.map((p, idx) => {
+                    const resultId = p.id || p._id || idx;
+                    return (
+                      <div key={resultId} className="card">
+                        <div className="card-media">
+                          <img src={p.photo} alt={p.name} />
+                          <span className="card-badge" style={{ 
+                            borderColor: p.source_type === 'ong_shelter' ? 'var(--accent-blue)' : (p.source_type === 'certified_breeder' ? 'var(--mongo-green)' : 'var(--accent-red)'),
+                            color: p.source_type === 'ong_shelter' ? 'var(--accent-blue)' : (p.source_type === 'certified_breeder' ? 'var(--mongo-green)' : 'var(--accent-red)')
+                          }}>
+                            {p.source_type === 'ong_shelter' ? 'Albergue' : (p.source_type === 'certified_breeder' ? 'Criadero' : 'Perdido')}
+                          </span>
+                        </div>
+                        <div className="card-body">
+                          <h3 className="card-title" style={{ color: 'var(--text-white)' }}>{p.name || 'Mascota'}</h3>
+                          <div className="card-subtitle" style={{ color: 'var(--accent-blue)' }}>{p.species} | {p.breed}</div>
+                          <p className="card-desc" style={{ color: 'var(--text-light)' }}>{p.description}</p>
+                          <div className="card-meta">
+                            <span>{p.source_name || (p.status === 'lost' ? 'Alerta Perdido' : 'Protectora')}</span>
+                            <span>{p.age || ''}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1246,17 +1383,23 @@ export default function App() {
         <div className="dashboard-grid">
           <div>
             {/* Create Caretaker */}
-            <div className="glass-panel panel-section" style={{ marginBottom: '1.5rem' }}>
-              <h2 className="panel-title">📝 Registrarse como Cuidador</h2>
+            <div className="glass-panel panel-section watermarked-panel" style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 className="panel-title">📝 Registrarse como Cuidador</h2>
+                  <p className="subtitle">Únete como cuidador solidario, profesional o veterinario especializado</p>
+                </div>
+                <CooperatingPetsIcon />
+              </div>
               {currentUser && currentUser.role === 'Cuidador' && loggedCaretaker ? (
                 <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-                  <p style={{ fontWeight: 600 }}>Ya te encuentras registrado como cuidador con el correo <strong>{currentUser.email}</strong>.</p>
-                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                  <p style={{ fontWeight: 600, color: 'var(--text-white)' }}>Ya te encuentras registrado como cuidador con el correo <strong>{currentUser.email}</strong>.</p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-light)' }}>
                     Estado del perfil: {loggedCaretaker.is_verified ? '✓ Verificado y activo públicamente' : '⏳ Pendiente de validación de DNI en el panel lateral'}
                   </p>
                 </div>
               ) : (
-                <form onSubmit={handleRegisterCaretaker} className="form-grid">
+                <form onSubmit={handleRegisterCaretaker} className="form-grid" style={{ marginTop: '1.5rem' }}>
                   <div>
                     <div className="form-group">
                       <label>Nombre Completo</label>
@@ -1364,10 +1507,10 @@ export default function App() {
                 caretakers.map(c => {
                   const caretakerId = c.id || c._id;
                   return (
-                    <div key={caretakerId} className="glass-panel" style={{ padding: '1.25rem', textAlign: 'left', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', borderLeft: '4px solid var(--mongo-forest)' }}>
+                    <div key={caretakerId} className="glass-panel" style={{ padding: '1.25rem', textAlign: 'left', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', borderLeft: '4px solid var(--mongo-green)' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
-                          <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{c.name}</h3>
+                          <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-white)' }}>{c.name}</h3>
                           <span className={`role-badge ${c.role.includes('Solidario') ? 'role-solidario' : (c.role.includes('Profesional') ? 'role-profesional' : 'role-especializado')}`}>
                             {c.role}
                           </span>
@@ -1400,7 +1543,7 @@ export default function App() {
                         </div>
 
                         {c.role_rules && (
-                          <div style={{ marginTop: '0.75rem', background: 'var(--bg-primary)', padding: '0.4rem', borderRadius: '4px', fontSize: '0.75rem', border: '1px solid var(--border-color)' }}>
+                          <div style={{ marginTop: '0.75rem', background: 'var(--mongo-dark-bg)', padding: '0.4rem', borderRadius: '4px', fontSize: '0.75rem', border: '1px solid var(--mongo-border)', color: 'var(--text-light)' }}>
                             🔑 <b>Reglas (Factory):</b> Límite: {c.role_rules.max_pets} mascotas | Pago: {c.role_rules.allow_payment ? 'Permitido' : 'Gratuito'}
                           </div>
                         )}
@@ -1421,7 +1564,7 @@ export default function App() {
 
                         {/* Add Review */}
                         <div className="reviews-container">
-                          <strong style={{ fontSize: '0.8rem' }}>Agregar Calificación</strong>
+                          <strong style={{ fontSize: '0.8rem', color: 'var(--text-white)' }}>Agregar Calificación</strong>
                           <form onSubmit={(e) => handleAddReview(caretakerId, e)} style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
                             <input 
                               type="text" 
@@ -1464,7 +1607,7 @@ export default function App() {
                                     <span>{r.reviewer_name}</span>
                                     <span>{r.score}★</span>
                                   </div>
-                                  <div style={{ color: 'var(--text-secondary)' }}>"{r.comment}"</div>
+                                  <div style={{ color: 'var(--text-light)' }}>"{r.comment}"</div>
                                 </div>
                               ))}
                             </div>
@@ -1481,8 +1624,8 @@ export default function App() {
           {/* Validation Sidebar */}
           <div>
             <div className="glass-panel panel-section">
-              <h2 className="panel-title" style={{ color: 'var(--mongo-forest)' }}>🛡️ Verificación de Cuidadores (RNF 3.1)</h2>
-              <p style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+              <h2 className="panel-title" style={{ color: 'var(--mongo-green)' }}>🛡️ Verificación de Cuidadores (RNF 3.1)</h2>
+              <p style={{ fontSize: '0.8rem', marginBottom: '0.75rem', color: 'var(--text-light)' }}>
                 Antes de activar un perfil de cuidador de manera pública, valida la autenticidad de su DNI.
               </p>
 
@@ -1493,12 +1636,12 @@ export default function App() {
                   {unverifiedCaretakers.map(c => {
                     const caretakerId = c.id || c._id;
                     return (
-                      <div key={caretakerId} style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid var(--border-color)' }}>
+                      <div key={caretakerId} style={{ background: 'var(--mongo-dark-bg)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid var(--mongo-border)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                          <strong>{c.name}</strong>
-                          <span style={{ color: 'var(--mongo-forest)', fontWeight: 700 }}>{c.role}</span>
+                          <strong style={{ color: 'var(--text-white)' }}>{c.name}</strong>
+                          <span style={{ color: 'var(--mongo-green)', fontWeight: 700 }}>{c.role}</span>
                         </div>
-                        <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                        <div style={{ color: 'var(--text-light)', marginBottom: '0.5rem' }}>
                           DNI: <b>{c.id_document || 'No especificado'}</b>
                         </div>
                         <button 
@@ -1523,7 +1666,7 @@ export default function App() {
         <div>© 2026 PetMatch & Alert. Todos los derechos reservados.</div>
         <div>
           <button className="btn-link-seed" onClick={handleSeed}>
-            Cargar Datos de Semilla (MySQL)
+            Cargar Datos de Semilla (MySQL/SQLite)
           </button>
         </div>
       </footer>
